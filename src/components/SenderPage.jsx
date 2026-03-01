@@ -11,7 +11,7 @@ export default function SenderPage() {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState(null); // { passcode, filename, size, expiresAt }
+  const [result, setResult] = useState(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
 
@@ -34,9 +34,7 @@ export default function SenderPage() {
       xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
 
       xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          setProgress((e.loaded / e.total) * 100);
-        }
+        if (e.lengthComputable) setProgress((e.loaded / e.total) * 100);
       };
 
       xhr.onload = () => {
@@ -71,43 +69,40 @@ export default function SenderPage() {
     if (!result?.passcode) return;
     await navigator.clipboard.writeText(result.passcode);
     setCopied(true);
-    showNotification('Passcode copied to clipboard!', 'success');
+    showNotification('Passcode copied!', 'success');
     setTimeout(() => setCopied(false), 2000);
   };
 
   const formatSize = (bytes) => {
     if (!bytes) return '';
+    if (bytes > 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
     if (bytes > 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
     return `${(bytes / 1024).toFixed(1)} KB`;
   };
 
-  const formatExpiry = (isoStr) => {
-    if (!isoStr) return '';
-    return new Date(isoStr).toLocaleString();
-  };
-
   return (
-    <div className="min-h-screen bg-slate-950 dark:bg-slate-950">
-      <div className="max-w-2xl mx-auto px-4 py-12">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 transition-colors duration-300">
+      <div className="max-w-2xl mx-auto px-4 py-10 sm:py-12 pb-24 sm:pb-12">
         {/* Heading */}
         <div className="text-center mb-10 fade-in">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-indigo-400 text-sm font-medium mb-4">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-100 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 rounded-full text-indigo-600 dark:text-indigo-400 text-sm font-medium mb-4">
             <CloudArrowUpIcon className="w-4 h-4" />
             Send a File
           </div>
-          <h1 className="text-4xl font-bold text-white mb-3">
+          <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-3">
             Share anything,{' '}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-500">
               securely
             </span>
           </h1>
-          <p className="text-slate-400">
-            Upload a file up to <span className="text-indigo-400 font-medium">3 GB</span>. Get an 8-digit passcode to share — link expires in <span className="text-indigo-400 font-medium">30 minutes</span>.
+          <p className="text-slate-500 dark:text-slate-400">
+            Upload up to <span className="text-indigo-500 font-medium">1 GB</span>. Get a <span className="text-indigo-500 font-medium">6-digit passcode</span> — expires in{' '}
+            <span className="text-indigo-500 font-medium">30 minutes</span>.
           </p>
         </div>
 
         {/* Upload card */}
-        <div className="bg-white/3 backdrop-blur-xl border border-white/8 rounded-2xl p-6 fade-in shadow-2xl">
+        <div className="bg-white dark:bg-white/3 border border-slate-200 dark:border-white/8 rounded-2xl p-6 fade-in shadow-sm dark:shadow-2xl transition-colors duration-300">
           <DragDropUpload onFileSelect={setFile} disabled={uploading} />
 
           {file && !uploading && (
@@ -127,7 +122,7 @@ export default function SenderPage() {
           )}
 
           {error && (
-            <div className="mt-4 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-sm">
+            <div className="mt-4 p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl text-rose-600 dark:text-rose-400 text-sm">
               ⚠ {error}
             </div>
           )}
@@ -135,28 +130,28 @@ export default function SenderPage() {
 
         {/* Success card */}
         {result && (
-          <div className="mt-6 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-6 fade-in">
+          <div className="mt-6 bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-2xl p-6 fade-in">
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <p className="text-emerald-400 font-semibold">File uploaded successfully!</p>
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <p className="text-emerald-700 dark:text-emerald-400 font-semibold">File uploaded successfully!</p>
             </div>
 
-            <p className="text-slate-400 text-sm mb-1">{result.filename}</p>
-            <p className="text-slate-500 text-xs mb-4">
-              {formatSize(result.size)} · Expires: {formatExpiry(result.expiresAt)}
+            <p className="text-slate-600 dark:text-slate-400 text-sm mb-1">{result.filename}</p>
+            <p className="text-slate-400 dark:text-slate-500 text-xs mb-4">
+              {formatSize(result.size)} · Expires: {new Date(result.expiresAt).toLocaleString()}
             </p>
 
             {/* Passcode display */}
             <div className="text-center mb-4">
-              <p className="text-slate-400 text-sm mb-2 flex items-center justify-center gap-1">
+              <p className="text-slate-500 dark:text-slate-400 text-sm mb-2 flex items-center justify-center gap-1">
                 <LockClosedIcon className="w-4 h-4" />
-                Passcode
+                Your 6-Digit Passcode
               </p>
               <div className="flex items-center justify-center gap-2 flex-wrap">
                 {result.passcode.split('').map((digit, i) => (
                   <div
                     key={i}
-                    className="w-12 h-14 rounded-xl bg-white/8 border border-white/15 flex items-center justify-center text-2xl font-bold text-white float-anim"
+                    className="w-12 h-14 rounded-xl bg-slate-100 dark:bg-white/8 border border-slate-200 dark:border-white/15 flex items-center justify-center text-2xl font-bold text-slate-900 dark:text-white float-anim"
                     style={{ animationDelay: `${i * 0.08}s` }}
                   >
                     {digit}
@@ -170,8 +165,8 @@ export default function SenderPage() {
               onClick={copyPasscode}
               className={`w-full py-3 rounded-xl font-medium text-sm transition-all duration-200 flex items-center justify-center gap-2 ${
                 copied
-                  ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400'
-                  : 'bg-white/5 border border-white/10 hover:bg-white/10 text-slate-300 hover:text-white'
+                  ? 'bg-emerald-100 dark:bg-emerald-500/20 border border-emerald-300 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400'
+                  : 'bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               {copied ? (
@@ -181,9 +176,9 @@ export default function SenderPage() {
               )}
             </button>
 
-            <p className="text-center text-slate-500 text-xs mt-4">
-              Share this passcode with the recipient. They can use it at{' '}
-              <span className="text-indigo-400">/receive</span>.
+            <p className="text-center text-slate-400 dark:text-slate-500 text-xs mt-4">
+              Share this passcode at{' '}
+              <span className="text-indigo-500">/receive</span>.
             </p>
           </div>
         )}

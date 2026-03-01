@@ -11,8 +11,8 @@ router.get('/:passcode', async (req, res) => {
   try {
     const { passcode } = req.params;
 
-    if (!/^\d{8}$/.test(passcode)) {
-      return res.status(400).json({ error: 'Passcode must be exactly 8 digits' });
+    if (!/^\d{6}$/.test(passcode)) {
+      return res.status(400).json({ error: 'Passcode must be exactly 6 digits' });
     }
 
     // Look up file by passcode

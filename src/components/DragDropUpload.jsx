@@ -4,7 +4,7 @@ import { ArrowUpTrayIcon, DocumentIcon, XCircleIcon } from '@heroicons/react/24/
 export default function DragDropUpload({ onFileSelect, disabled }) {
   const [dragging, setDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
-  const MAX_MB = 3 * 1024; // 3 GB in MB
+  const MAX_MB = 1024; // 1 GB
 
   const handleFile = useCallback((file) => {
     if (!file) return;
@@ -78,7 +78,7 @@ export default function DragDropUpload({ onFileSelect, disabled }) {
             <p className="text-white font-semibold mb-1">
               {dragging ? 'Drop it here!' : 'Drag & drop your file'}
             </p>
-            <p className="text-slate-500 text-sm">or click to browse · max 3 GB</p>
+            <p className="text-slate-500 text-sm">or click to browse · max 1 GB</p>
           </div>
           <input type="file" className="hidden" onChange={onInputChange} disabled={disabled} />
         </label>

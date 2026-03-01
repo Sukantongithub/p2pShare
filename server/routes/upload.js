@@ -8,15 +8,15 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Multer: store in memory, limit 3 GB
+// Multer: store in memory, limit 1 GB
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 3 * 1024 * 1024 * 1024 },
+  limits: { fileSize: 1 * 1024 * 1024 * 1024 },
 });
 
-/** Generate a random 8-digit numeric passcode */
+/** Generate a random 6-digit numeric passcode */
 function generatePasscode() {
-  return Math.floor(10000000 + Math.random() * 90000000).toString();
+  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 // POST /api/upload
