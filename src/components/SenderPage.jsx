@@ -102,7 +102,7 @@ export default function SenderPage() {
             </span>
           </h1>
           <p className="text-slate-400">
-            Upload a file and get an 8-digit passcode to share with the recipient.
+            Upload a file up to <span className="text-indigo-400 font-medium">3 GB</span>. Get an 8-digit passcode to share — link expires in <span className="text-indigo-400 font-medium">30 minutes</span>.
           </p>
         </div>
 

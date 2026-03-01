@@ -8,10 +8,10 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Multer: store in memory, limit 100 MB
+// Multer: store in memory, limit 3 GB
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 100 * 1024 * 1024 },
+  limits: { fileSize: 3 * 1024 * 1024 * 1024 },
 });
 
 /** Generate a random 8-digit numeric passcode */
@@ -55,7 +55,7 @@ router.post('/', requireAuth, upload.single('file'), async (req, res) => {
     }
 
     const fileUrl = `https://${process.env.CF_R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${BUCKET_NAME}/${key}`;
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString(); // 30 minutes
 
     // Save metadata to Supabase
     const { error: dbError } = await supabase.from('files').insert({
