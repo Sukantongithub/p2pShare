@@ -1,0 +1,42 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ThemeProvider } from './context/ThemeContext';
+import AuthGuard from './components/Auth/AuthGuard';
+import LoginPage from './components/Auth/LoginPage';
+import Navbar from './components/Navbar';
+import SenderPage from './components/SenderPage';
+import ReceiverPage from './components/ReceiverPage';
+import Notification from './components/Notification';
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <BrowserRouter>
+        <Notification />
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/"
+            element={
+              <AuthGuard>
+                <div className="min-h-screen bg-slate-950 dark:bg-slate-950">
+                  <Navbar />
+                  <SenderPage />
+                </div>
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/receive"
+            element={
+              <div className="min-h-screen bg-slate-950 dark:bg-slate-950">
+                <Navbar />
+                <ReceiverPage />
+              </div>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </ThemeProvider>
+  );
+}

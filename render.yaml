@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: p2pshare-backend
+    env: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CF_R2_ACCOUNT_ID
+        sync: false
+      - key: CF_R2_ACCESS_KEY_ID
+        sync: false
+      - key: CF_R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: CF_R2_BUCKET_NAME
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
