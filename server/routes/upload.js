@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import r2Client, { BUCKET_NAME } from '../s3.js';
 import supabase from '../supabase.js';
 import { requireAuth } from '../middleware/auth.js';
+import { checkUsageLimit, incrementUsage } from './usage.js';
 
 const router = express.Router();
 
@@ -24,6 +25,17 @@ router.post('/', requireAuth, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file provided' });
+    }
+
+    // ── Usage limit check (8 GB/month free) ──────────────────────────
+    const { allowed, used, remaining } = await checkUsageLimit(req.user.id, req.file.size);
+    if (!allowed) {
+      return res.status(402).json({
+        error: 'limit_exceeded',
+        message: `You've used all 8 GB of your free monthly storage. Upgrade to continue uploading.`,
+        bytesUsed: used,
+        freeLimit: 8 * 1024 * 1024 * 1024,
+      });
     }
 
     const { originalname, buffer, mimetype } = req.file;
@@ -73,6 +85,9 @@ router.post('/', requireAuth, upload.single('file'), async (req, res) => {
       console.error('DB insert error:', dbError);
       return res.status(500).json({ error: 'Failed to save file metadata' });
     }
+
+    // Increment monthly usage (fire-and-forget)
+    setImmediate(() => incrementUsage(req.user.id, req.file.size));
 
     return res.status(200).json({
       passcode,

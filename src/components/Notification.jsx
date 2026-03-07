@@ -8,9 +8,9 @@ const ICONS = {
 };
 
 const COLORS = {
-  success: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300',
-  error: 'bg-rose-500/10 border-rose-500/20 text-rose-300',
-  info: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-300',
+  success: 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-300',
+  error: 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20 text-rose-700 dark:text-rose-300',
+  info: 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-500/20 text-indigo-700 dark:text-indigo-300',
 };
 
 // Singleton notification manager

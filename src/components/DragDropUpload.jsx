@@ -1,15 +1,18 @@
 import { useCallback, useState } from 'react';
 import { ArrowUpTrayIcon, DocumentIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import { showNotification } from './Notification';
+
+const MAX_BYTES = 1 * 1024 * 1024 * 1024; // 1 GB
 
 export default function DragDropUpload({ onFileSelect, disabled }) {
   const [dragging, setDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
-  const MAX_MB = 1024; // 1 GB
 
   const handleFile = useCallback((file) => {
     if (!file) return;
-    if (file.size > MAX_MB * 1024 * 1024) {
-      alert(`File too large. Maximum size is ${MAX_MB} MB.`);
+    // BUG FIX: replaced alert() with showNotification for consistent UX
+    if (file.size > MAX_BYTES) {
+      showNotification('File too large. Maximum size is 1 GB.', 'error');
       return;
     }
     setSelectedFile(file);
@@ -21,33 +24,35 @@ export default function DragDropUpload({ onFileSelect, disabled }) {
   const onDrop = (e) => {
     e.preventDefault();
     setDragging(false);
-    const file = e.dataTransfer.files[0];
-    handleFile(file);
+    handleFile(e.dataTransfer.files[0]);
   };
-  const onInputChange = (e) => {
-    const file = e.target.files[0];
-    handleFile(file);
-  };
+  const onInputChange = (e) => handleFile(e.target.files[0]);
 
   const clearFile = () => {
     setSelectedFile(null);
     onFileSelect(null);
   };
 
+  const formatSize = (bytes) => {
+    if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+    if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+    return `${(bytes / 1024).toFixed(0)} KB`;
+  };
+
   return (
     <div>
       {selectedFile ? (
-        /* Selected file preview */
-        <div className="flex items-center gap-4 p-4 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl">
-          <div className="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
-            <DocumentIcon className="w-6 h-6 text-indigo-400" />
+        /* Selected file preview — BUG FIX: uses theme-aware text colors */
+        <div className="flex items-center gap-4 p-4 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 rounded-2xl">
+          <div className="w-12 h-12 rounded-xl bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
+            <DocumentIcon className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-white font-medium truncate">{selectedFile.name}</p>
-            <p className="text-slate-400 text-sm">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+            <p className="text-slate-900 dark:text-white font-medium truncate">{selectedFile.name}</p>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">{formatSize(selectedFile.size)}</p>
           </div>
           {!disabled && (
-            <button onClick={clearFile} className="text-slate-500 hover:text-rose-400 transition-colors flex-shrink-0">
+            <button onClick={clearFile} className="text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors flex-shrink-0">
               <XCircleIcon className="w-6 h-6" />
             </button>
           )}
@@ -61,24 +66,30 @@ export default function DragDropUpload({ onFileSelect, disabled }) {
           className={`
             flex flex-col items-center justify-center gap-4 p-10 rounded-2xl border-2 border-dashed cursor-pointer
             transition-all duration-300 group
-            ${dragging
-              ? 'border-indigo-400 bg-indigo-500/10 glow-pulse scale-[1.01]'
-              : 'border-white/10 bg-white/2 hover:border-indigo-500/50 hover:bg-indigo-500/5'
+            ${disabled
+              ? 'opacity-50 cursor-not-allowed border-slate-200 dark:border-white/10'
+              : dragging
+              ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 glow-pulse scale-[1.01]'
+              : 'border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/2 hover:border-indigo-400 dark:hover:border-indigo-500/50 hover:bg-indigo-50 dark:hover:bg-indigo-500/5'
             }
           `}
         >
           <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
-            dragging ? 'bg-indigo-500/30 scale-110' : 'bg-white/5 group-hover:bg-indigo-500/15'
+            dragging
+              ? 'bg-indigo-100 dark:bg-indigo-500/30 scale-110'
+              : 'bg-slate-100 dark:bg-white/5 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-500/15'
           }`}>
             <ArrowUpTrayIcon className={`w-8 h-8 transition-all duration-300 ${
-              dragging ? 'text-indigo-300 -translate-y-1' : 'text-slate-400 group-hover:text-indigo-400'
+              dragging
+                ? 'text-indigo-600 dark:text-indigo-300 -translate-y-1'
+                : 'text-slate-400 group-hover:text-indigo-500 dark:group-hover:text-indigo-400'
             }`} />
           </div>
           <div className="text-center">
-            <p className="text-white font-semibold mb-1">
+            <p className="text-slate-800 dark:text-white font-semibold mb-1">
               {dragging ? 'Drop it here!' : 'Drag & drop your file'}
             </p>
-            <p className="text-slate-500 text-sm">or click to browse · max 1 GB</p>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">or click to browse · max 1 GB</p>
           </div>
           <input type="file" className="hidden" onChange={onInputChange} disabled={disabled} />
         </label>

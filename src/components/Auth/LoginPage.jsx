@@ -46,8 +46,8 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-2xl shadow-indigo-500/30 mb-4">
             <ShareIcon className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">
-            P2P<span className="text-indigo-400">Share</span>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+            P2P<span className="text-indigo-500">Share</span>
           </h1>
           <p className="text-slate-400 mt-1 text-sm">Secure file sharing via passcode</p>
         </div>
@@ -55,7 +55,7 @@ export default function LoginPage() {
         {/* Card */}
         <div className="bg-white dark:bg-white/5 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl p-8 shadow-xl dark:shadow-2xl">
           {/* Mode toggle */}
-          <div className="flex rounded-xl bg-white/5 p-1 mb-6">
+          <div className="flex rounded-xl bg-slate-100 dark:bg-white/5 p-1 mb-6">
             {['signin', 'signup'].map((m) => (
               <button
                 key={m}
@@ -63,7 +63,7 @@ export default function LoginPage() {
                 className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                   mode === m
                     ? 'bg-indigo-600 text-white shadow-lg'
-                    : 'text-slate-400 hover:text-white'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 {m === 'signin' ? 'Sign In' : 'Sign Up'}
@@ -100,7 +100,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => setShowPw((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
               >
                 {showPw ? <EyeSlashIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
               </button>

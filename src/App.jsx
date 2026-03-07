@@ -18,7 +18,8 @@ export default function App() {
             path="/"
             element={
               <AuthGuard>
-                <div className="min-h-screen bg-slate-950 dark:bg-slate-950">
+                {/* BUG FIX: removed hardcoded bg-slate-950 wrapper — let pages control their own bg */}
+                <div className="min-h-screen bg-slate-100 dark:bg-slate-950 transition-colors duration-300">
                   <Navbar />
                   <SenderPage />
                 </div>
@@ -28,7 +29,7 @@ export default function App() {
           <Route
             path="/receive"
             element={
-              <div className="min-h-screen bg-slate-950 dark:bg-slate-950">
+              <div className="min-h-screen bg-slate-100 dark:bg-slate-950 transition-colors duration-300">
                 <Navbar />
                 <ReceiverPage />
               </div>

@@ -1,5 +1,5 @@
 import express from 'express';
-import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import r2Client, { BUCKET_NAME } from '../s3.js';
 import supabase from '../supabase.js';
@@ -28,27 +28,49 @@ router.get('/:passcode', async (req, res) => {
 
     // Check expiry
     if (new Date(file.expires_at) < new Date()) {
+      // Clean up expired file from R2 and DB
+      await cleanupFile(file);
       return res.status(410).json({ error: 'This file has expired and is no longer available.' });
     }
 
-    // Generate signed URL from R2 (valid for 15 minutes)
+    // Generate signed URL (valid 15 min — enough to start download)
     const command = new GetObjectCommand({
       Bucket: BUCKET_NAME,
       Key: file.r2_key,
     });
     const signedUrl = await getSignedUrl(r2Client, command, { expiresIn: 900 });
 
-    return res.status(200).json({
+    // Respond first, then delete asynchronously (fire-and-forget)
+    res.status(200).json({
       filename: file.filename,
       size: file.size,
       signedUrl,
       createdAt: file.created_at,
       expiresAt: file.expires_at,
     });
+
+    // Delete file from R2 + Supabase after responding (one-time download)
+    setImmediate(() => cleanupFile(file));
+
   } catch (err) {
     console.error('Download error:', err);
     return res.status(500).json({ error: 'Failed to retrieve file', detail: err.message });
   }
 });
+
+async function cleanupFile(file) {
+  try {
+    // Delete from Cloudflare R2
+    await r2Client.send(new DeleteObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: file.r2_key,
+    }));
+    // Delete record from Supabase
+    await supabase.from('files').delete().eq('id', file.id);
+    console.log(`🗑 Deleted file: ${file.filename} (ID: ${file.id})`);
+  } catch (err) {
+    console.error('Cleanup error:', err.message);
+  }
+}
 
 export default router;

@@ -2,10 +2,23 @@ import { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import DragDropUpload from './DragDropUpload';
 import ProgressBar from './ProgressBar';
+import UpgradeModal from './UpgradeModal';
 import { showNotification } from './Notification';
-import { ClipboardDocumentIcon, ClipboardDocumentCheckIcon, CloudArrowUpIcon, LockClosedIcon } from '@heroicons/react/24/outline';
+import { useUsage } from '../hooks/useUsage';
+import {
+  ClipboardDocumentIcon, ClipboardDocumentCheckIcon,
+  CloudArrowUpIcon, LockClosedIcon, ChartBarIcon,
+} from '@heroicons/react/24/outline';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
+const FREE_LIMIT = 8 * 1024 ** 3;
+
+function fmtBytes(bytes) {
+  if (!bytes) return '0 B';
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(0)} MB`;
+  return `${(bytes / 1024).toFixed(0)} KB`;
+}
 
 export default function SenderPage() {
   const [file, setFile] = useState(null);
@@ -14,9 +27,18 @@ export default function SenderPage() {
   const [result, setResult] = useState(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
+  const [showUpgrade, setShowUpgrade] = useState(false);
+
+  const { usage, refetch: refetchUsage } = useUsage();
+
+  const usedBytes = usage?.bytesUsed ?? 0;
+  const usedPct = Math.min((usedBytes / FREE_LIMIT) * 100, 100);
+  const isAtLimit = usedBytes >= FREE_LIMIT;
 
   const handleUpload = async () => {
     if (!file) return;
+    if (isAtLimit) { setShowUpgrade(true); return; }
+
     setError('');
     setUploading(true);
     setProgress(0);
@@ -43,7 +65,10 @@ export default function SenderPage() {
           const data = JSON.parse(xhr.responseText);
           setResult(data);
           setFile(null);
-          showNotification('File uploaded successfully!', 'success');
+          showNotification('File uploaded!', 'success');
+          refetchUsage();
+        } else if (xhr.status === 402) {
+          setShowUpgrade(true);
         } else {
           const data = JSON.parse(xhr.responseText);
           setError(data.error || 'Upload failed');
@@ -73,18 +98,13 @@ export default function SenderPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const formatSize = (bytes) => {
-    if (!bytes) return '';
-    if (bytes > 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
-    if (bytes > 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  };
-
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 transition-colors duration-300">
+      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} usage={usage} />}
+
       <div className="max-w-2xl mx-auto px-4 py-10 sm:py-12 pb-24 sm:pb-12">
         {/* Heading */}
-        <div className="text-center mb-10 fade-in">
+        <div className="text-center mb-8 fade-in">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-100 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 rounded-full text-indigo-600 dark:text-indigo-400 text-sm font-medium mb-4">
             <CloudArrowUpIcon className="w-4 h-4" />
             Send a File
@@ -95,31 +115,78 @@ export default function SenderPage() {
               securely
             </span>
           </h1>
-          <p className="text-slate-500 dark:text-slate-400">
-            Upload up to <span className="text-indigo-500 font-medium">1 GB</span>. Get a <span className="text-indigo-500 font-medium">6-digit passcode</span> — expires in{' '}
+          <p className="text-slate-500 dark:text-slate-400 text-sm sm:text-base">
+            Upload up to <span className="text-indigo-500 font-medium">1 GB</span> per file. Get a{' '}
+            <span className="text-indigo-500 font-medium">6-digit passcode</span> — expires in{' '}
             <span className="text-indigo-500 font-medium">30 minutes</span>.
           </p>
         </div>
 
+        {/* ── Monthly usage bar ── */}
+        {usage && (
+          <div className={`mb-5 p-4 rounded-xl border transition-colors duration-300 ${
+            isAtLimit
+              ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30'
+              : 'bg-white dark:bg-white/3 border-slate-200 dark:border-white/8'
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-300">
+                <ChartBarIcon className="w-4 h-4 text-indigo-500" />
+                Monthly Storage
+              </span>
+              <span className={`text-sm font-semibold ${isAtLimit ? 'text-rose-500' : 'text-slate-700 dark:text-slate-300'}`}>
+                {fmtBytes(usedBytes)} / 8 GB
+              </span>
+            </div>
+            <div className="w-full h-2 bg-slate-100 dark:bg-white/8 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  isAtLimit
+                    ? 'bg-gradient-to-r from-rose-500 to-orange-500'
+                    : usedPct > 75
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-400'
+                    : 'bg-gradient-to-r from-indigo-500 to-purple-500'
+                }`}
+                style={{ width: `${usedPct}%` }}
+              />
+            </div>
+            {isAtLimit && (
+              <p className="text-xs text-rose-500 dark:text-rose-400 mt-1.5">
+                Storage full.{' '}
+                <button
+                  onClick={() => setShowUpgrade(true)}
+                  className="underline font-medium hover:text-rose-600"
+                >
+                  Upgrade to continue
+                </button>
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Upload card */}
         <div className="bg-white dark:bg-white/3 border border-slate-200 dark:border-white/8 rounded-2xl p-6 fade-in shadow-sm dark:shadow-2xl transition-colors duration-300">
-          <DragDropUpload onFileSelect={setFile} disabled={uploading} />
+          <DragDropUpload onFileSelect={setFile} disabled={uploading || isAtLimit} />
 
           {file && !uploading && (
             <button
               onClick={handleUpload}
-              className="mt-4 w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all duration-200 flex items-center justify-center gap-2"
+              disabled={isAtLimit}
+              className={`mt-4 w-full py-3.5 font-semibold rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 ${
+                isAtLimit
+                  ? 'bg-slate-200 dark:bg-white/5 text-slate-400 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-indigo-500/25 hover:shadow-indigo-500/40'
+              }`}
             >
-              <CloudArrowUpIcon className="w-5 h-5" />
-              Upload & Generate Passcode
+              {isAtLimit ? (
+                <><ChartBarIcon className="w-5 h-5" /> Storage limit reached — Upgrade</>
+              ) : (
+                <><CloudArrowUpIcon className="w-5 h-5" /> Upload & Generate Passcode</>
+              )}
             </button>
           )}
 
-          {uploading && (
-            <div className="mt-4">
-              <ProgressBar progress={progress} />
-            </div>
-          )}
+          {uploading && <div className="mt-4"><ProgressBar progress={progress} /></div>}
 
           {error && (
             <div className="mt-4 p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl text-rose-600 dark:text-rose-400 text-sm">
@@ -131,21 +198,20 @@ export default function SenderPage() {
         {/* Success card */}
         {result && (
           <div className="mt-6 bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-2xl p-6 fade-in">
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-2 mb-3">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <p className="text-emerald-700 dark:text-emerald-400 font-semibold">File uploaded successfully!</p>
+              <p className="text-emerald-700 dark:text-emerald-400 font-semibold">Uploaded! File auto-deletes after download.</p>
             </div>
 
             <p className="text-slate-600 dark:text-slate-400 text-sm mb-1">{result.filename}</p>
             <p className="text-slate-400 dark:text-slate-500 text-xs mb-4">
-              {formatSize(result.size)} · Expires: {new Date(result.expiresAt).toLocaleString()}
+              {fmtBytes(result.size)} · Expires: {new Date(result.expiresAt).toLocaleString()}
             </p>
 
-            {/* Passcode display */}
+            {/* Passcode digits */}
             <div className="text-center mb-4">
               <p className="text-slate-500 dark:text-slate-400 text-sm mb-2 flex items-center justify-center gap-1">
-                <LockClosedIcon className="w-4 h-4" />
-                Your 6-Digit Passcode
+                <LockClosedIcon className="w-4 h-4" /> Your 6-Digit Passcode
               </p>
               <div className="flex items-center justify-center gap-2 flex-wrap">
                 {result.passcode.split('').map((digit, i) => (
@@ -160,25 +226,22 @@ export default function SenderPage() {
               </div>
             </div>
 
-            {/* Copy button */}
             <button
               onClick={copyPasscode}
               className={`w-full py-3 rounded-xl font-medium text-sm transition-all duration-200 flex items-center justify-center gap-2 ${
                 copied
                   ? 'bg-emerald-100 dark:bg-emerald-500/20 border border-emerald-300 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400'
-                  : 'bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                  : 'bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300'
               }`}
             >
-              {copied ? (
-                <><ClipboardDocumentCheckIcon className="w-4 h-4" /> Copied!</>
-              ) : (
-                <><ClipboardDocumentIcon className="w-4 h-4" /> Copy Passcode</>
-              )}
+              {copied
+                ? <><ClipboardDocumentCheckIcon className="w-4 h-4" /> Copied!</>
+                : <><ClipboardDocumentIcon className="w-4 h-4" /> Copy Passcode</>
+              }
             </button>
 
-            <p className="text-center text-slate-400 dark:text-slate-500 text-xs mt-4">
-              Share this passcode at{' '}
-              <span className="text-indigo-500">/receive</span>.
+            <p className="text-center text-slate-400 dark:text-slate-500 text-xs mt-3">
+              Share at <span className="text-indigo-500">/receive</span>
             </p>
           </div>
         )}

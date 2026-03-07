@@ -13,6 +13,7 @@ dotenv.config({ path: join(__dirname, '..', '.env') });
 import uploadRouter from './routes/upload.js';
 import downloadRouter from './routes/download.js';
 import authRouter from './routes/auth.js';
+import usageRouter from './routes/usage.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -50,6 +51,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/upload', uploadRouter);
 app.use('/api/download', downloadRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/usage', usageRouter);
 
 // 404 handler
 app.use((_req, res) => {

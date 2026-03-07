@@ -35,10 +35,10 @@ export default function DownloadCart({ fileInfo }) {
       className={`
         relative rounded-2xl border-2 border-dashed transition-all duration-300 overflow-hidden
         ${downloaded
-          ? 'border-emerald-500/50 bg-emerald-500/10'
+          ? 'border-emerald-400 dark:border-emerald-500/50 bg-emerald-50 dark:bg-emerald-500/10'
           : draggingOver
-          ? 'border-indigo-400 bg-indigo-500/15 glow-pulse scale-[1.02]'
-          : 'border-white/10 bg-white/3 hover:border-white/20'
+          ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-500/15 glow-pulse scale-[1.02]'
+          : 'border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/3 hover:border-slate-300 dark:hover:border-white/20'
         }
       `}
     >
@@ -49,17 +49,17 @@ export default function DownloadCart({ fileInfo }) {
         {downloaded ? (
           <>
             <CheckCircleIcon className="w-10 h-10 text-emerald-400" />
-            <p className="text-emerald-400 font-semibold">Download started!</p>
+            <p className="text-emerald-700 dark:text-emerald-400 font-semibold">Download started!</p>
           </>
         ) : draggingOver ? (
           <>
             <ArrowDownTrayIcon className="w-10 h-10 text-indigo-400 animate-bounce" />
-            <p className="text-indigo-300 font-semibold">Release to download</p>
+            <p className="text-indigo-600 dark:text-indigo-300 font-semibold">Release to download</p>
           </>
         ) : (
           <>
             <ShoppingCartIcon className="w-10 h-10 text-slate-500" />
-            <p className="text-slate-500 font-medium text-sm">Drag file card here to download</p>
+            <p className="text-slate-500 dark:text-slate-400 font-medium text-sm">Drag file card here to download</p>
           </>
         )}
       </div>
