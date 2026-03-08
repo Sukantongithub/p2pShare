@@ -1,10 +1,28 @@
 import { XMarkIcon, SparklesIcon, ChartBarIcon, CloudArrowUpIcon } from '@heroicons/react/24/outline';
 
-const PACKS = [
-  { gb: 1, price: 12, label: 'Starter', highlight: false },
-  { gb: 5, price: 55, label: 'Popular', highlight: true, saving: 'Save ₹5' },
-  { gb: 10, price: 99, label: 'Value', highlight: false, saving: 'Save ₹21' },
-];
+const BASE_PER_GB_MONTH = 10.99;
+const ANNUAL_DISCOUNT = 0.15; // 15% off yearly billing
+
+const PLAN_GB = [1, 3, 5, 10];
+
+const PLANS = PLAN_GB.map((gb) => {
+  const monthly = gb * BASE_PER_GB_MONTH;
+  const annual = monthly * 12 * (1 - ANNUAL_DISCOUNT);
+  const annualSaving = monthly * 12 - annual;
+
+  return {
+    gb,
+    monthly,
+    annual,
+    annualSaving,
+    label: gb === 1 ? 'Starter' : gb === 5 ? 'Popular' : gb === 10 ? 'Pro' : 'Plus',
+    highlight: gb === 5,
+  };
+});
+
+function fmtINR(value) {
+  return `₹${value.toFixed(2)}`;
+}
 
 function fmtBytes(bytes) {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
@@ -18,11 +36,11 @@ export default function UpgradeModal({ onClose, usage }) {
   const pct = Math.min((used / limit) * 100, 100);
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-200 flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden fade-in">
 
         {/* Header */}
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-5 relative">
+        <div className="bg-linear-to-r from-indigo-600 to-purple-600 px-6 py-5 relative">
           <button
             onClick={onClose}
             className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"
@@ -53,44 +71,57 @@ export default function UpgradeModal({ onClose, usage }) {
           </div>
           <div className="w-full h-2.5 bg-slate-100 dark:bg-white/8 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-rose-500 to-orange-500 rounded-full"
+              className="h-full bg-linear-to-r from-rose-500 to-orange-500 rounded-full"
               style={{ width: `${pct}%` }}
             />
           </div>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">Resets on the 1st of every month</p>
         </div>
 
-        {/* Packs */}
+        {/* Subscription plans */}
         <div className="px-6 py-5">
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-1.5">
             <CloudArrowUpIcon className="w-4 h-4 text-indigo-500" />
-            Buy extra storage — pay only for what you need
+            Choose a subscription plan
           </p>
-          <div className="grid grid-cols-3 gap-2 mb-4">
-            {PACKS.map((pack) => (
+
+          <div className="space-y-2.5 mb-4">
+            {PLANS.map((plan) => (
               <div
-                key={pack.gb}
-                className={`relative rounded-xl border p-3 text-center transition-all duration-200 ${
-                  pack.highlight
+                key={plan.gb}
+                className={`relative rounded-xl border p-3.5 transition-all duration-200 ${
+                  plan.highlight
                     ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10'
                     : 'border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/3'
                 }`}
               >
-                {pack.highlight && (
+                {plan.highlight && (
                   <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-indigo-600 text-white text-[9px] font-bold rounded-full uppercase tracking-wider whitespace-nowrap">
                     Best value
                   </span>
                 )}
-                <p className={`text-xl font-bold ${pack.highlight ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-900 dark:text-white'}`}>
-                  {pack.gb} GB
+
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className={`text-base font-bold ${plan.highlight ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-900 dark:text-white'}`}>
+                      +{plan.gb} GB <span className="text-xs font-medium text-slate-500 dark:text-slate-400">({plan.label})</span>
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Extra monthly storage</p>
+                  </div>
+
+                  <div className="text-right">
+                    <p className={`text-sm font-semibold ${plan.highlight ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                      {fmtINR(plan.monthly)} /month
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {fmtINR(plan.annual)} /year
+                    </p>
+                  </div>
+                </div>
+
+                <p className="text-[11px] mt-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                  Save {fmtINR(plan.annualSaving)} annually
                 </p>
-                <p className={`text-lg font-semibold ${pack.highlight ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                  ₹{pack.price}
-                </p>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500">{pack.label}</p>
-                {pack.saving && (
-                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">{pack.saving}</p>
-                )}
               </div>
             ))}
           </div>
@@ -98,9 +129,9 @@ export default function UpgradeModal({ onClose, usage }) {
           {/* Coming soon CTA */}
           <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-4 text-center">
             <p className="text-slate-500 dark:text-slate-400 text-sm">
-              🚀 <span className="font-medium text-slate-700 dark:text-slate-300">Payments launching soon!</span>
+              🚀 <span className="font-medium text-slate-700 dark:text-slate-300">Subscriptions launching soon!</span>
               <br />
-              <span className="text-xs">We'll notify you when top-ups are available.</span>
+              <span className="text-xs">Monthly and annual billing will be available.</span>
             </p>
           </div>
         </div>

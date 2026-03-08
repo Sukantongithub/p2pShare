@@ -38,24 +38,24 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen animated-gradient-light dark:animated-gradient flex items-center justify-center p-4 transition-colors duration-300">
+    <div className="min-h-screen light-mesh animated-gradient-light dark:animated-gradient flex items-center justify-center p-4 transition-colors duration-300">
       {/* Glassmorphism card */}
       <div className="w-full max-w-md fade-in">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-2xl shadow-indigo-500/30 mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-linear-to-br from-indigo-500 to-purple-600 shadow-md dark:shadow-2xl dark:shadow-indigo-500/30 mb-4">
             <ShareIcon className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
             P2P<span className="text-indigo-500">Share</span>
           </h1>
-          <p className="text-slate-400 mt-1 text-sm">Secure file sharing via passcode</p>
+          <p className="text-slate-600 dark:text-slate-400 mt-1 text-sm">Secure file sharing via passcode</p>
         </div>
 
         {/* Card */}
-        <div className="bg-white dark:bg-white/5 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl p-8 shadow-xl dark:shadow-2xl">
+        <div className="bg-white/95 dark:bg-white/5 backdrop-blur-xl border border-slate-300 dark:border-white/10 rounded-2xl p-8 shadow-2xl dark:shadow-2xl">
           {/* Mode toggle */}
-          <div className="flex rounded-xl bg-slate-100 dark:bg-white/5 p-1 mb-6">
+          <div className="flex rounded-xl bg-slate-200 dark:bg-white/5 p-1 mb-6">
             {['signin', 'signup'].map((m) => (
               <button
                 key={m}
@@ -63,7 +63,7 @@ export default function LoginPage() {
                 className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                   mode === m
                     ? 'bg-indigo-600 text-white shadow-lg'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    : 'text-slate-700 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 {m === 'signin' ? 'Sign In' : 'Sign Up'}
@@ -74,20 +74,20 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email */}
             <div className="relative">
-              <EnvelopeIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <EnvelopeIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
               <input
                 type="email"
                 placeholder="Email address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full pl-10 pr-4 py-3 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all duration-200"
+                className="w-full pl-10 pr-4 py-3 bg-white dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all duration-200"
               />
             </div>
 
             {/* Password */}
             <div className="relative">
-              <LockClosedIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <LockClosedIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
               <input
                 type={showPw ? 'text' : 'password'}
                 placeholder="Password"
@@ -95,12 +95,12 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
-                className="w-full pl-10 pr-12 py-3 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all duration-200"
+                className="w-full pl-10 pr-12 py-3 bg-white dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all duration-200"
               />
               <button
                 type="button"
                 onClick={() => setShowPw((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors"
               >
                 {showPw ? <EyeSlashIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
               </button>
@@ -122,7 +122,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-6 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all duration-200"
+              className="w-full py-3 px-6 bg-linear-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl border border-indigo-300/60 dark:border-transparent shadow-sm dark:shadow-lg dark:shadow-indigo-500/25 transition-all duration-200"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -139,9 +139,9 @@ export default function LoginPage() {
           </form>
 
           {/* Receiver link */}
-          <p className="text-center text-slate-500 text-sm mt-6">
+          <p className="text-center text-slate-600 dark:text-slate-400 text-sm mt-6">
             Have a passcode?{' '}
-            <a href="/receive" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">
+            <a href="/receive" className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 font-medium transition-colors">
               Receive a file →
             </a>
           </p>

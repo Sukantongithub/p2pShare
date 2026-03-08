@@ -5,6 +5,7 @@ import LoginPage from './components/Auth/LoginPage';
 import Navbar from './components/Navbar';
 import SenderPage from './components/SenderPage';
 import ReceiverPage from './components/ReceiverPage';
+import ProfilePage from './components/ProfilePage';
 import Notification from './components/Notification';
 
 export default function App() {
@@ -33,6 +34,17 @@ export default function App() {
                 <Navbar />
                 <ReceiverPage />
               </div>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <AuthGuard>
+                <div className="min-h-screen bg-slate-100 dark:bg-slate-950 transition-colors duration-300">
+                  <Navbar />
+                  <ProfilePage />
+                </div>
+              </AuthGuard>
             }
           />
           <Route path="*" element={<Navigate to="/" replace />} />
