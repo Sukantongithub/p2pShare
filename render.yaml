@@ -2,9 +2,9 @@ services:
   - type: web
     name: p2pshare-backend
     env: node
-    # rootDir removed — install from project root so all deps in root package.json are available
+    rootDir: server
     buildCommand: npm install
-    startCommand: node server/index.js
+    startCommand: node index.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
