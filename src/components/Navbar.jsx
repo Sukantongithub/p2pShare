@@ -1,10 +1,15 @@
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
-import { useTheme } from '../context/ThemeContext';
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
+import { useTheme } from "../context/ThemeContext";
 import {
-  SunIcon, MoonIcon, ArrowRightOnRectangleIcon, ShareIcon,
-  CloudArrowUpIcon, CloudArrowDownIcon, UserCircleIcon,
-} from '@heroicons/react/24/outline';
+  SunIcon,
+  MoonIcon,
+  ArrowRightOnRectangleIcon,
+  ShareIcon,
+  CloudArrowUpIcon,
+  CloudArrowDownIcon,
+  UserCircleIcon,
+} from "@heroicons/react/24/outline";
 
 export default function Navbar() {
   const { user, signOut } = useAuth();
@@ -14,15 +19,15 @@ export default function Navbar() {
 
   const handleSignOut = async () => {
     await signOut();
-    navigate('/login');
+    navigate("/login");
   };
 
   const isActive = (path) => location.pathname === path;
 
   const tabs = [
-    { to: '/', label: 'Send', icon: CloudArrowUpIcon },
-    { to: '/receive', label: 'Receive', icon: CloudArrowDownIcon },
-    { to: '/profile', label: 'Profile', icon: UserCircleIcon },
+    { to: "/", label: "Send", icon: CloudArrowUpIcon },
+    { to: "/receive", label: "Receive", icon: CloudArrowDownIcon },
+    { to: "/profile", label: "Profile", icon: UserCircleIcon },
   ];
 
   return (
@@ -50,7 +55,11 @@ export default function Navbar() {
               className="p-2 rounded-lg text-slate-700 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10 transition-all duration-200"
               aria-label="Toggle theme"
             >
-              {dark ? <SunIcon className="w-5 h-5" /> : <MoonIcon className="w-5 h-5" />}
+              {dark ? (
+                <SunIcon className="w-5 h-5" />
+              ) : (
+                <MoonIcon className="w-5 h-5" />
+              )}
             </button>
             {user && (
               <button
@@ -78,13 +87,16 @@ export default function Navbar() {
                   className={`
                     flex-1 flex flex-col items-center justify-center gap-1 py-2.5 px-4 rounded-xl text-[11px] font-semibold
                     transition-all duration-200
-                    ${active
-                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
-                      : 'text-slate-700 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10'
+                    ${
+                      active
+                        ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/30"
+                        : "text-slate-700 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10"
                     }
                   `}
                 >
-                  <Icon className={`w-5 h-5 transition-transform duration-200 ${active ? 'scale-110' : ''}`} />
+                  <Icon
+                    className={`w-5 h-5 transition-transform duration-200 ${active ? "scale-110" : ""}`}
+                  />
                   {label}
                 </Link>
               );

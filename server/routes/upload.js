@@ -11,7 +11,9 @@ import { checkUsageLimit, incrementUsage } from "./usage.js";
 const router = express.Router();
 const PASSCODE_LENGTH = 6;
 const PASSCODE_MAX = 10 ** PASSCODE_LENGTH;
-const FILE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const FREE_FILE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const MAX_PAID_EXPIRY_HOURS = 72;
+const SUPPORTED_PLAN_GB = new Set([1, 3, 5, 10]);
 
 // Use disk storage so large files (up to 8 GB) don't blow up RAM
 const upload = multer({
@@ -27,6 +29,31 @@ const upload = multer({
 function generatePasscode() {
   const code = Math.floor(Math.random() * PASSCODE_MAX); // 0-999999
   return String(code).padStart(PASSCODE_LENGTH, "0"); // Always exactly 6 digits
+}
+
+function getPlanGbFromUser(user) {
+  const planGbRaw = user?.user_metadata?.plan_gb ?? user?.app_metadata?.plan_gb;
+  const planGb = Number(planGbRaw);
+  if (Number.isFinite(planGb) && SUPPORTED_PLAN_GB.has(planGb)) return planGb;
+  return 0;
+}
+
+function getFilePolicyForUser(user) {
+  const planGb = getPlanGbFromUser(user);
+  if (planGb > 0) {
+    const expiryHours = Math.min(planGb * 12, MAX_PAID_EXPIRY_HOURS);
+    return {
+      planGb,
+      expiryMs: expiryHours * 60 * 60 * 1000,
+      maxDownloads: planGb * 5,
+    };
+  }
+
+  return {
+    planGb: 0,
+    expiryMs: FREE_FILE_TTL_MS,
+    maxDownloads: 1,
+  };
 }
 
 // POST /api/upload
@@ -54,6 +81,7 @@ router.post("/", requireAuth, upload.single("file"), async (req, res) => {
     const { originalname, mimetype, size } = req.file;
     const fileId = uuidv4();
     const key = `uploads/${fileId}/${originalname}`;
+    const filePolicy = getFilePolicyForUser(req.user);
 
     // Stream file from disk → R2 (avoids loading 8 GB into RAM)
     const fileStream = fs.createReadStream(tmpPath);
@@ -100,7 +128,7 @@ router.post("/", requireAuth, upload.single("file"), async (req, res) => {
 
     const fileUrl = `https://${process.env.CF_R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${BUCKET_NAME}/${key}`;
 
-    // Save metadata to Supabase with default 30-minute expiry
+    // Save metadata to Supabase with plan-based expiry/download policy
     const { error: dbError } = await supabase.from("files").insert({
       id: fileId,
       user_id: req.user.id,
@@ -109,12 +137,19 @@ router.post("/", requireAuth, upload.single("file"), async (req, res) => {
       r2_key: key,
       passcode,
       size,
-      expires_at: new Date(Date.now() + FILE_TTL_MS).toISOString(),
+      expires_at: new Date(Date.now() + filePolicy.expiryMs).toISOString(),
+      max_downloads: filePolicy.maxDownloads,
+      download_count: 0,
     });
 
     if (dbError) {
-      console.error("DB insert error:", dbError);
-      return res.status(500).json({ error: "Failed to save file metadata" });
+      console.error("DB insert error:", JSON.stringify(dbError, null, 2));
+      return res.status(500).json({
+        error: "Failed to save file metadata",
+        detail: dbError.message,
+        hint: dbError.hint ?? null,
+        code: dbError.code ?? null,
+      });
     }
 
     // Increment monthly bandwidth usage (fire-and-forget)
@@ -124,6 +159,9 @@ router.post("/", requireAuth, upload.single("file"), async (req, res) => {
       passcode,
       filename: originalname,
       size,
+      maxDownloads: filePolicy.maxDownloads,
+      expiresInMs: filePolicy.expiryMs,
+      planGb: filePolicy.planGb,
     });
   } catch (err) {
     // Always clean up temp file on error

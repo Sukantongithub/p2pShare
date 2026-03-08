@@ -88,6 +88,13 @@ export default function ReceiverPage() {
     return `${(bytes / 1024).toFixed(1)} KB`;
   };
 
+  const formatDateTime = (value) => {
+    if (!value) return "—";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleString();
+  };
+
   return (
     <div className="min-h-screen light-mesh bg-linear-to-b from-slate-50 to-purple-50/40 dark:bg-slate-950 transition-colors duration-300">
       <div className="max-w-2xl mx-auto px-4 py-10 sm:py-12 pb-24 sm:pb-12">
@@ -205,7 +212,10 @@ export default function ReceiverPage() {
                     {formatSize(fileInfo.size)}
                   </p>
                   <p className="text-rose-500 dark:text-rose-400 text-xs mt-0.5 font-medium">
-                    🗑️ Deleted immediately after download
+                    🕒 Expires at {formatDateTime(fileInfo.expiresAt)}
+                  </p>
+                  <p className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">
+                    Downloads remaining: {fileInfo.downloadsRemaining ?? 1}
                   </p>
                 </div>
               </div>

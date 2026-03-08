@@ -1,12 +1,12 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider } from './context/ThemeContext';
-import AuthGuard from './components/Auth/AuthGuard';
-import LoginPage from './components/Auth/LoginPage';
-import Navbar from './components/Navbar';
-import SenderPage from './components/SenderPage';
-import ReceiverPage from './components/ReceiverPage';
-import ProfilePage from './components/ProfilePage';
-import Notification from './components/Notification';
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ThemeProvider } from "./context/ThemeContext";
+import AuthGuard from "./components/Auth/AuthGuard";
+import LoginPage from "./components/Auth/LoginPage";
+import Navbar from "./components/Navbar";
+import SenderPage from "./components/SenderPage";
+import ReceiverPage from "./components/ReceiverPage";
+import ProfilePage from "./components/ProfilePage";
+import Notification from "./components/Notification";
 
 export default function App() {
   return (

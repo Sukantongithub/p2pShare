@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -14,9 +15,12 @@ import uploadRouter from './routes/upload.js';
 import downloadRouter from './routes/download.js';
 import authRouter from './routes/auth.js';
 import usageRouter from './routes/usage.js';
+import r2Client, { BUCKET_NAME } from './s3.js';
+import supabase from './supabase.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const EXPIRED_FILE_CLEANUP_INTERVAL_MS = Number(process.env.EXPIRED_FILE_CLEANUP_INTERVAL_MS || 2 * 60 * 1000);
 
 // CORS: allow local dev + production Vercel URL
 const allowedOrigins = [
@@ -41,6 +45,53 @@ app.use(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+let expiredCleanupRunning = false;
+async function cleanupExpiredFiles() {
+  if (expiredCleanupRunning) return;
+  expiredCleanupRunning = true;
+
+  try {
+    const nowIso = new Date().toISOString();
+    const { data: expiredFiles, error } = await supabase
+      .from('files')
+      .select('id, filename, r2_key')
+      .lt('expires_at', nowIso)
+      .limit(100);
+
+    if (error) {
+      console.error('Expired cleanup query failed:', error.message);
+      return;
+    }
+
+    if (!expiredFiles?.length) return;
+
+    for (const file of expiredFiles) {
+      try {
+        await r2Client.send(new DeleteObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: file.r2_key,
+        }));
+      } catch (err) {
+        console.error(`Expired cleanup R2 delete failed (${file.id}):`, err.message);
+      }
+
+      const { error: deleteDbError } = await supabase.from('files').delete().eq('id', file.id);
+      if (deleteDbError) {
+        console.error(`Expired cleanup DB delete failed (${file.id}):`, deleteDbError.message);
+      } else {
+        console.log(`⌛ Expired file removed: ${file.filename} (${file.id})`);
+      }
+    }
+  } catch (err) {
+    console.error('Expired cleanup error:', err.message);
+  } finally {
+    expiredCleanupRunning = false;
+  }
+}
+
+setInterval(cleanupExpiredFiles, EXPIRED_FILE_CLEANUP_INTERVAL_MS).unref();
+setTimeout(cleanupExpiredFiles, 5_000).unref();
 
 // Health check
 app.get('/api/health', (_req, res) => {

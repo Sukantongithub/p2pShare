@@ -1,4 +1,9 @@
-import { XMarkIcon, SparklesIcon, ChartBarIcon, CloudArrowUpIcon } from '@heroicons/react/24/outline';
+import {
+  XMarkIcon,
+  SparklesIcon,
+  ChartBarIcon,
+  CloudArrowUpIcon,
+} from "@heroicons/react/24/outline";
 
 const BASE_PER_GB_MONTH = 10.99;
 const ANNUAL_DISCOUNT = 0.15; // 15% off yearly billing
@@ -9,13 +14,18 @@ const PLANS = PLAN_GB.map((gb) => {
   const monthly = gb * BASE_PER_GB_MONTH;
   const annual = monthly * 12 * (1 - ANNUAL_DISCOUNT);
   const annualSaving = monthly * 12 - annual;
+  const expiryHours = Math.min(gb * 12, 72); // scales by tier, capped at 72h
+  const downloadLimit = gb * 5;
 
   return {
     gb,
     monthly,
     annual,
     annualSaving,
-    label: gb === 1 ? 'Starter' : gb === 5 ? 'Popular' : gb === 10 ? 'Pro' : 'Plus',
+    expiryHours,
+    downloadLimit,
+    label:
+      gb === 1 ? "Starter" : gb === 5 ? "Popular" : gb === 10 ? "Pro" : "Plus",
     highlight: gb === 5,
   };
 });
@@ -38,7 +48,6 @@ export default function UpgradeModal({ onClose, usage }) {
   return (
     <div className="fixed inset-0 z-200 flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden fade-in">
-
         {/* Header */}
         <div className="bg-linear-to-r from-indigo-600 to-purple-600 px-6 py-5 relative">
           <button
@@ -52,8 +61,12 @@ export default function UpgradeModal({ onClose, usage }) {
               <SparklesIcon className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="text-white font-bold text-lg">Free Limit Reached</h2>
-              <p className="text-white/70 text-sm">You've used your 8 GB monthly allowance</p>
+              <h2 className="text-white font-bold text-lg">
+                Free Limit Reached
+              </h2>
+              <p className="text-white/70 text-sm">
+                You've used your 8 GB monthly allowance
+              </p>
             </div>
           </div>
         </div>
@@ -75,7 +88,9 @@ export default function UpgradeModal({ onClose, usage }) {
               style={{ width: `${pct}%` }}
             />
           </div>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">Resets on the 1st of every month</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">
+            Resets on the 1st of every month
+          </p>
         </div>
 
         {/* Subscription plans */}
@@ -91,8 +106,8 @@ export default function UpgradeModal({ onClose, usage }) {
                 key={plan.gb}
                 className={`relative rounded-xl border p-3.5 transition-all duration-200 ${
                   plan.highlight
-                    ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10'
-                    : 'border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/3'
+                    ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10"
+                    : "border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/3"
                 }`}
               >
                 {plan.highlight && (
@@ -103,14 +118,23 @@ export default function UpgradeModal({ onClose, usage }) {
 
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className={`text-base font-bold ${plan.highlight ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-900 dark:text-white'}`}>
-                      +{plan.gb} GB <span className="text-xs font-medium text-slate-500 dark:text-slate-400">({plan.label})</span>
+                    <p
+                      className={`text-base font-bold ${plan.highlight ? "text-indigo-600 dark:text-indigo-400" : "text-slate-900 dark:text-white"}`}
+                    >
+                      +{plan.gb} GB{" "}
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                        ({plan.label})
+                      </span>
                     </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Extra monthly storage</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Extra monthly storage
+                    </p>
                   </div>
 
                   <div className="text-right">
-                    <p className={`text-sm font-semibold ${plan.highlight ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                    <p
+                      className={`text-sm font-semibold ${plan.highlight ? "text-indigo-600 dark:text-indigo-400" : "text-slate-800 dark:text-slate-200"}`}
+                    >
                       {fmtINR(plan.monthly)} /month
                     </p>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -122,6 +146,15 @@ export default function UpgradeModal({ onClose, usage }) {
                 <p className="text-[11px] mt-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
                   Save {fmtINR(plan.annualSaving)} annually
                 </p>
+
+                <ul className="mt-2.5 space-y-1 text-[11px] text-slate-600 dark:text-slate-400">
+                  <li>• File expiry: {plan.expiryHours} hours</li>
+                  <li>• Download limit: {plan.downloadLimit} downloads</li>
+                  <li>• File Access Tracking & Analytics</li>
+                  <li className="pl-2">- Who downloaded the file</li>
+                  <li className="pl-2">- Date & time of access</li>
+                  <li className="pl-2">- Download count</li>
+                </ul>
               </div>
             ))}
           </div>
@@ -129,9 +162,14 @@ export default function UpgradeModal({ onClose, usage }) {
           {/* Coming soon CTA */}
           <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-4 text-center">
             <p className="text-slate-500 dark:text-slate-400 text-sm">
-              🚀 <span className="font-medium text-slate-700 dark:text-slate-300">Subscriptions launching soon!</span>
+              🚀{" "}
+              <span className="font-medium text-slate-700 dark:text-slate-300">
+                Subscriptions launching soon!
+              </span>
               <br />
-              <span className="text-xs">Monthly and annual billing will be available.</span>
+              <span className="text-xs">
+                Monthly and annual billing will be available.
+              </span>
             </p>
           </div>
         </div>
