@@ -10,7 +10,7 @@ import {
   CloudArrowUpIcon, LockClosedIcon, ChartBarIcon,
 } from '@heroicons/react/24/outline';
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_BASE = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '');
 const FREE_LIMIT = 8 * 1024 ** 3;
 
 function fmtBytes(bytes) {
@@ -116,9 +116,8 @@ export default function SenderPage() {
             </span>
           </h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm sm:text-base">
-            Upload up to <span className="text-indigo-500 font-medium">1 GB</span> per file. Get a{' '}
-            <span className="text-indigo-500 font-medium">6-digit passcode</span> — expires in{' '}
-            <span className="text-indigo-500 font-medium">30 minutes</span>.
+            Upload files up to <span className="font-medium text-indigo-500">8 GB</span>.
+            Files are <span className="font-medium text-rose-500 dark:text-rose-400">permanently deleted</span> after the first download.
           </p>
         </div>
 
@@ -200,13 +199,16 @@ export default function SenderPage() {
           <div className="mt-6 bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-2xl p-6 fade-in">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <p className="text-emerald-700 dark:text-emerald-400 font-semibold">Uploaded! File auto-deletes after download.</p>
+              <p className="text-emerald-700 dark:text-emerald-400 font-semibold">File uploaded successfully!</p>
             </div>
 
-            <p className="text-slate-600 dark:text-slate-400 text-sm mb-1">{result.filename}</p>
-            <p className="text-slate-400 dark:text-slate-500 text-xs mb-4">
-              {fmtBytes(result.size)} · Expires: {new Date(result.expiresAt).toLocaleString()}
-            </p>
+            <p className="text-slate-600 dark:text-slate-400 text-sm mb-1 truncate">{result.filename}</p>
+            <p className="text-slate-500 dark:text-slate-500 text-xs mb-3">{fmtBytes(result.size)}</p>
+
+            {/* One-time download badge */}
+            <div className="flex items-center gap-2 px-3 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl text-rose-600 dark:text-rose-400 text-xs font-semibold mb-4">
+              🗑️ This file will be <span className="underline">permanently deleted</span> after the first download
+            </div>
 
             {/* Passcode digits */}
             <div className="text-center mb-4">

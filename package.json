@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"vite\" \"node server/index.js\" --names \"frontend,backend\" --prefix-colors \"cyan,yellow\"",
+    "dev": "concurrently \"vite\" \"node --watch server/index.js\" --names \"frontend,backend\" --prefix-colors \"cyan,yellow\"",
     "dev:frontend": "vite",
-    "dev:backend": "node server/index.js",
+    "dev:backend": "node --watch server/index.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"

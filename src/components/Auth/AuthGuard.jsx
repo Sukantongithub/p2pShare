@@ -6,7 +6,8 @@ export default function AuthGuard({ children }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+      // BUG FIX: was hardcoded bg-slate-950, now respects theme
+      <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950 transition-colors duration-300">
         <div className="flex gap-2">
           {[0, 1, 2].map((i) => (
             <div

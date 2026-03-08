@@ -4,7 +4,7 @@ import DownloadCart from './DownloadCart';
 import { showNotification } from './Notification';
 import { LockOpenIcon, CloudArrowDownIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_BASE = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '');
 
 export default function ReceiverPage() {
   const [passcode, setPasscode] = useState(Array(6).fill(''));
@@ -100,7 +100,7 @@ export default function ReceiverPage() {
         <div className="bg-white dark:bg-white/3 border border-slate-200 dark:border-white/8 rounded-2xl p-5 sm:p-6 fade-in shadow-sm dark:shadow-2xl mb-5 transition-colors duration-300">
           <p className="text-slate-500 dark:text-slate-400 text-sm text-center mb-4">Enter 6-digit passcode</p>
 
-          {/* 8 digit inputs */}
+          {/* 6 digit inputs */}
           <div className="flex gap-2 sm:gap-3 justify-center mb-5" onPaste={handlePaste}>
             {passcode.map((digit, i) => (
               <input
@@ -161,8 +161,8 @@ export default function ReceiverPage() {
                 <div className="flex-1 min-w-0">
                   <p className="text-slate-900 dark:text-white font-semibold truncate">{fileInfo.filename}</p>
                   <p className="text-slate-500 dark:text-slate-400 text-sm">{formatSize(fileInfo.size)}</p>
-                  <p className="text-slate-400 dark:text-slate-600 text-xs mt-0.5">
-                    Expires: {new Date(fileInfo.expiresAt).toLocaleString()}
+                  <p className="text-rose-500 dark:text-rose-400 text-xs mt-0.5 font-medium">
+                    🗑️ Deleted immediately after download
                   </p>
                 </div>
               </div>

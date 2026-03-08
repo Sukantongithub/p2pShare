@@ -1,23 +1,16 @@
-# node_modules
+.gitignore
 node_modules/
-server/node_modules/
-
-# Build output
-dist/
-
-# Environment variables
 .env
 .env.local
 .env.*.local
-
-# Logs
+dist/
+build/
+uploads/
 *.log
-npm-debug.log*
-
-# OS files
 .DS_Store
-Thumbs.db
-
-# Editor
-.vscode/
 .idea/
+.vscode/
+*.swp
+*.swo
+mongo_data/
+codes

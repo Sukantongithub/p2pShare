@@ -1,6 +1,14 @@
 import { S3Client } from '@aws-sdk/client-s3';
 import dotenv from 'dotenv';
-dotenv.config({ path: '../.env' });
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+// BUG FIX: use absolute path relative to THIS file, not CWD
+// Previously '../.env' resolved relative to where the process was _started_ from,
+// not where s3.js lives — causing "injecting env (0)" when run from project root.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+dotenv.config({ path: join(__dirname, '..', '.env') }); // server/ → P2Pshare/.env
 
 const accountId = process.env.CF_R2_ACCOUNT_ID;
 const accessKeyId = process.env.CF_R2_ACCESS_KEY_ID;
