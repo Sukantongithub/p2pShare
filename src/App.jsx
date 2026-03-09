@@ -3,8 +3,9 @@ import { ThemeProvider } from "./context/ThemeContext";
 import AuthGuard from "./components/Auth/AuthGuard";
 import LoginPage from "./components/Auth/LoginPage";
 import Navbar from "./components/Navbar";
-import SenderPage from "./components/SenderPage";
-import ReceiverPage from "./components/ReceiverPage";
+import FilePage from "./components/FilePage";
+import ClipboardPage from "./components/ClipboardPage";
+import BusySharePage from "./components/BusySharePage";
 import ProfilePage from "./components/ProfilePage";
 import Notification from "./components/Notification";
 
@@ -18,21 +19,29 @@ export default function App() {
           <Route
             path="/"
             element={
-              <AuthGuard>
-                {/* BUG FIX: removed hardcoded bg-slate-950 wrapper — let pages control their own bg */}
-                <div className="min-h-screen bg-slate-100 dark:bg-slate-950 transition-colors duration-300">
-                  <Navbar />
-                  <SenderPage />
-                </div>
-              </AuthGuard>
+              <div className="min-h-screen bg-slate-100 dark:bg-slate-950 transition-colors duration-300">
+                <Navbar />
+                <FilePage />
+              </div>
             }
           />
+          {/* /receive redirects to / — users use the Receive tab in FilePage */}
+          <Route path="/receive" element={<Navigate to="/" replace />} />
           <Route
-            path="/receive"
+            path="/clipboard"
             element={
               <div className="min-h-screen bg-slate-100 dark:bg-slate-950 transition-colors duration-300">
                 <Navbar />
-                <ReceiverPage />
+                <ClipboardPage />
+              </div>
+            }
+          />
+          <Route
+            path="/busy-share"
+            element={
+              <div className="min-h-screen bg-slate-100 dark:bg-slate-950 transition-colors duration-300">
+                <Navbar />
+                <BusySharePage />
               </div>
             }
           />
