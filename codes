@@ -5,3 +5,22 @@ Accounts used.
 
 bucket name: p2pshare
 DB passcode: p2pShare@121
+
+
+# ── Frontend (Vite) – add VITE_* vars to Vercel Environment Variables ──
+VITE_SUPABASE_URL=https://wqjtggddigkgtpzbumww.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndxanRnZ2RkaWdrZ3RwemJ1bXd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNzEyMjMsImV4cCI6MjA4Nzk0NzIyM30.KtZpWauMAOOBATQINzZ1Gmj_ZK4exxB8KK-uEicVeZY
+VITE_API_URL=https://p2pshare-doku.onrender.com
+
+# ── Backend – add these to Render Environment Variables ──────────────
+SUPABASE_URL=https://wqjtggddigkgtpzbumww.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndxanRnZ2RkaWdrZ3RwemJ1bXd3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MjM3MTIyMywiZXhwIjoyMDg3OTQ3MjIzfQ.DlizLdfprHnjJGwmgYaVo81GRA8Lsq5p-MkM7BXMM90
+CF_R2_ACCOUNT_ID=a43944637bec4d60bfa8e60ea747f7d1
+CF_R2_ACCESS_KEY_ID=38592983d6130a2cad18ffea94af31bd
+CF_R2_SECRET_ACCESS_KEY=d352352570e3fbc235a66e87c98e53558b82e614e20669007db83cd758aebec9
+CF_R2_BUCKET_NAME=p2pshare
+FRONTEND_URL=https://p2p-share-nu.vercel.app
+PORT=3001
+
+
+Callback URL (for OAuth)=https://wqjtggddigkgtpzbumww.supabase.co/auth/v1/callback
