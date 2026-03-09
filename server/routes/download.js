@@ -14,7 +14,14 @@ const TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes
 function getPublicBaseUrl(req) {
   if (process.env.API_PUBLIC_URL)
     return process.env.API_PUBLIC_URL.replace(/\/$/, "");
-  return `${req.protocol}://${req.get("host")}`;
+
+  // Trust the forwarded protocol (Vite proxy, Render, Vercel, nginx all set this)
+  const proto =
+    req.headers["x-forwarded-proto"]?.split(",")[0]?.trim() ||
+    req.protocol ||
+    "https";
+
+  return `${proto}://${req.get("host")}`;
 }
 
 async function extractDownloaderIdentity(req) {

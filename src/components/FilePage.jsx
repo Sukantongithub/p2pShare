@@ -5,7 +5,6 @@ import { useAuth } from "../hooks/useAuth";
 import DragDropUpload from "./DragDropUpload";
 import ProgressBar from "./ProgressBar";
 import UpgradeModal from "./UpgradeModal";
-import DownloadCart from "./DownloadCart";
 import { showNotification } from "./Notification";
 import { useUsage } from "../hooks/useUsage";
 import axios from "axios";
@@ -258,11 +257,10 @@ function SendTab({ user }) {
 //  RECEIVE TAB
 // ─────────────────────────────────────────────
 function ReceiveTab() {
-  const [passcode, setPasscode]     = useState(Array(6).fill(""));
-  const [loading, setLoading]       = useState(false);
-  const [fileInfo, setFileInfo]     = useState(null);
-  const [error, setError]           = useState("");
-  const [isDragging, setIsDragging] = useState(false);
+  const [passcode, setPasscode] = useState(Array(6).fill(""));
+  const [loading, setLoading]   = useState(false);
+  const [fileInfo, setFileInfo] = useState(null);
+  const [error, setError]       = useState("");
   const inputRefs = useRef([]);
 
   const handleDigitChange = (index, value) => {
@@ -402,24 +400,6 @@ function ReceiveTab() {
             Download File
           </button>
 
-          <div className="hidden sm:block">
-            <p className="text-center text-slate-600 dark:text-slate-600 text-xs mb-3">Or drag the card below into the drop zone</p>
-            <div
-              draggable
-              onDragStart={() => setIsDragging(true)}
-              onDragEnd={() => setIsDragging(false)}
-              className={`bg-slate-50 dark:bg-white/3 border border-slate-200 dark:border-white/10 rounded-2xl p-4 cursor-grab active:cursor-grabbing transition-all duration-300 float-anim ${
-                isDragging ? "opacity-60 scale-95 rotate-1" : "hover:border-slate-300 dark:hover:border-white/20"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <CloudArrowDownIcon className="w-5 h-5 text-indigo-500 shrink-0" />
-                <span className="text-slate-700 dark:text-slate-300 text-sm font-medium truncate">{fileInfo.filename}</span>
-                <CloudArrowDownIcon className="w-5 h-5 shrink-0 ml-auto text-slate-400" />
-              </div>
-            </div>
-            <div className="mt-3"><DownloadCart fileInfo={fileInfo} /></div>
-          </div>
         </div>
       )}
     </div>

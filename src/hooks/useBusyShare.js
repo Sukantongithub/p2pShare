@@ -2,11 +2,18 @@
  * useBusyShare — WebRTC high-speed P2P file transfer hook
  *
  * Architecture:
- *  - 4 parallel RTCDataChannels (round-robin chunk distribution)
+ *  - 4 parallel RTCDataChannels (ordered, each streams its own slice)
  *  - Adaptive chunk size: 64 KB → 256 KB → 512 KB based on measured speed
- *  - BufferedAmount flow control: pause when any channel exceeds 8 MB
- *  - Binary-only transfers (ArrayBuffer + 4-byte sequence prefix)
+ *  - BufferedAmount flow control: pause when channel exceeds 8 MB
+ *  - Binary-only transfers (metadata as JSON string, chunks as ArrayBuffer)
  *  - Socket.io for SDP / ICE signaling only
+ *
+ * PARALLEL STRATEGY
+ *  Each channel is responsible for a fixed stripe of the file:
+ *    ch0 → bytes [0, stripe), ch1 → [stripe, 2*stripe), ...
+ *  All 4 channels send concurrently using separate async loops.
+ *  Receiver writes each chunk at the exact byte offset encoded in a
+ *  4-byte header prefix, so arrival order doesn't matter.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -18,7 +25,7 @@ const NUM_CHANNELS   = 4;
 const CHUNK_MIN      = 64  * 1024;        // 64 KB
 const CHUNK_DEFAULT  = 256 * 1024;        // 256 KB
 const CHUNK_MAX      = 512 * 1024;        // 512 KB
-const BUFFER_LIMIT   = 8  * 1024 * 1024; // 8 MB — pause threshold per channel
+const BUFFER_LIMIT   = 8  * 1024 * 1024; // 8 MB per channel — pause threshold
 const SPEED_INTERVAL = 500;              // measure speed every 500 ms
 const GUEST_MAX      = 500 * 1024 * 1024; // 500 MB
 const FREE_MAX       = 5  * 1024 ** 3;    // 5 GB
@@ -33,115 +40,106 @@ const RTC_CONFIG = {
 
 const API_BASE = import.meta.env.DEV ? '' : import.meta.env.VITE_API_URL || '';
 
+// Wait until a DataChannel is open
+function waitForOpen(dc) {
+  return new Promise((resolve, reject) => {
+    if (dc.readyState === 'open') { resolve(); return; }
+    dc.addEventListener('open', resolve, { once: true });
+    dc.addEventListener('error', reject, { once: true });
+  });
+}
+
+// Sleep helper for flow control
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
 // ─────────────────────────────────────────────────────────────────────────────
 export function useBusyShare() {
   const { user } = useAuth();
   const isGuest = !user;
-
   const maxBytes = isGuest ? GUEST_MAX : FREE_MAX;
 
   // ── State ─────────────────────────────────────────────────────────────────
-  const [state, setState]             = useState('idle');
-  // idle | waiting | connecting | transferring | done | cancelled | error
-  const [code, setCode]               = useState('');
-  const [progress, setProgress]       = useState(0);
-  const [speed, setSpeed]             = useState(0);   // bytes/sec
-  const [eta, setEta]                 = useState(null);
-  const [error, setError]             = useState('');
+  const [state, setState]               = useState('idle');
+  const [code, setCode]                 = useState('');
+  const [progress, setProgress]         = useState(0);
+  const [speed, setSpeed]               = useState(0);
+  const [eta, setEta]                   = useState(null);
+  const [error, setError]               = useState('');
   const [receivedFile, setReceivedFile] = useState(null);
-  // { name, size, mimeType, blob, url }
-  const [fileMeta, setFileMeta]       = useState(null);
-  // { name, size, mimeType } while sending/receiving
+  const [fileMeta, setFileMeta]         = useState(null);
 
-  // ── Refs (mutable, no re-render) ──────────────────────────────────────────
-  const socketRef   = useRef(null);
-  const pcRef       = useRef(null);
-  const channelsRef = useRef([]); // [RTCDataChannel × NUM_CHANNELS]
+  // ── Refs ──────────────────────────────────────────────────────────────────
+  const socketRef        = useRef(null);
+  const pcRef            = useRef(null);
+  const channelsRef      = useRef([]);
+  const transferAborted  = useRef(false);
 
-  // Sender refs
-  const fileRef         = useRef(null);
-  const chunkSizeRef    = useRef(CHUNK_DEFAULT);
-  const bytesSentRef    = useRef(0);
-  const speedBytesRef   = useRef(0);
-  const speedTimerRef   = useRef(null);
-  const transferAborted = useRef(false);
+  // Sender
+  const chunkSizeRef     = useRef(CHUNK_DEFAULT);
+  const bytesSentRef     = useRef(0);
+  const speedBytesRef    = useRef(0);
+  const speedTimerRef    = useRef(null);
 
-  // Receiver refs
-  const receiveBufferRef   = useRef(null); // Uint8Array receiving buffer
-  const receiveOffsetRef   = useRef(0);    // how many bytes written so far
-  const receivedMetaRef    = useRef(null);
-  const receivedBytesRef   = useRef(0);
-  const rxSpeedBytesRef    = useRef(0);
-  const rxSpeedTimerRef    = useRef(null);
-  const channelsReadyRef   = useRef(0);    // count of open channels (receiver side)
+  // Receiver — shared mutable state for all channel handlers
+  const receiveBufferRef = useRef(null);  // Uint8Array — full file
+  const receivedBytesRef = useRef(0);     // total bytes written so far
+  const rxSpeedBytesRef  = useRef(0);
+  const rxSpeedTimerRef  = useRef(null);
+  const receivedMetaRef  = useRef(null);
+  const doneCountRef     = useRef(0);     // how many channels sent "done"
 
-  // ── Socket connection (lazy, shared across calls) ─────────────────────────
+  // ── Socket helper ─────────────────────────────────────────────────────────
   function getSocket() {
     if (!socketRef.current || socketRef.current.disconnected) {
-      const s = socketIO(API_BASE || window.location.origin, {
+      socketRef.current = socketIO(API_BASE || window.location.origin, {
         path: '/socket.io',
         transports: ['websocket', 'polling'],
       });
-      socketRef.current = s;
     }
     return socketRef.current;
   }
 
-  // ── Cleanup helper ────────────────────────────────────────────────────────
+  // ── Cleanup ───────────────────────────────────────────────────────────────
   const cleanup = useCallback(() => {
     transferAborted.current = true;
     clearInterval(speedTimerRef.current);
     clearInterval(rxSpeedTimerRef.current);
-
     channelsRef.current.forEach(dc => { try { dc.close(); } catch {} });
     channelsRef.current = [];
-
-    if (pcRef.current) {
-      try { pcRef.current.close(); } catch {}
-      pcRef.current = null;
-    }
-
-    if (socketRef.current) {
-      socketRef.current.disconnect();
-      socketRef.current = null;
-    }
-
-    fileRef.current      = null;
+    if (pcRef.current) { try { pcRef.current.close(); } catch {}; pcRef.current = null; }
+    if (socketRef.current) { socketRef.current.disconnect(); socketRef.current = null; }
+    bytesSentRef.current     = 0;
+    speedBytesRef.current    = 0;
     receiveBufferRef.current = null;
-    channelsReadyRef.current = 0;
-    bytesSentRef.current = 0;
-    speedBytesRef.current = 0;
-    rxSpeedBytesRef.current = 0;
+    receivedBytesRef.current = 0;
+    rxSpeedBytesRef.current  = 0;
+    doneCountRef.current     = 0;
   }, []);
 
-  useEffect(() => cleanup, [cleanup]); // cleanup on unmount
+  useEffect(() => cleanup, [cleanup]);
 
-  // ── Speed tracker ─────────────────────────────────────────────────────────
+  // ── Speed / progress tracker ──────────────────────────────────────────────
   function startSpeedTracker(totalBytes, isSender) {
-    const bytesRef = isSender ? speedBytesRef : rxSpeedBytesRef;
-    const sentRef  = isSender ? bytesSentRef  : receivedBytesRef;
+    const rawRef  = isSender ? speedBytesRef  : rxSpeedBytesRef;
+    const doneRef = isSender ? bytesSentRef   : receivedBytesRef;
 
     const timer = setInterval(() => {
-      const bps = (bytesRef.current / SPEED_INTERVAL) * 1000;
-      bytesRef.current = 0;
+      const bps = (rawRef.current / SPEED_INTERVAL) * 1000;
+      rawRef.current = 0;
       setSpeed(bps);
-
-      const done    = sentRef.current;
-      const remaining = totalBytes - done;
+      const remaining = totalBytes - doneRef.current;
       if (bps > 0) setEta(Math.ceil(remaining / bps));
+      setProgress(Math.min((doneRef.current / totalBytes) * 100, 99));
 
-      setProgress(Math.min((done / totalBytes) * 100, 99));
-
-      // Adaptive chunk size
       if (isSender) {
-        if (bps < 5_000_000)        chunkSizeRef.current = CHUNK_MIN;
-        else if (bps > 50_000_000)  chunkSizeRef.current = CHUNK_MAX;
-        else                         chunkSizeRef.current = CHUNK_DEFAULT;
+        if      (bps < 5_000_000)  chunkSizeRef.current = CHUNK_MIN;
+        else if (bps > 50_000_000) chunkSizeRef.current = CHUNK_MAX;
+        else                        chunkSizeRef.current = CHUNK_DEFAULT;
       }
     }, SPEED_INTERVAL);
 
-    if (isSender) speedTimerRef.current    = timer;
-    else          rxSpeedTimerRef.current  = timer;
+    if (isSender) speedTimerRef.current   = timer;
+    else          rxSpeedTimerRef.current = timer;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -149,28 +147,29 @@ export function useBusyShare() {
   // ─────────────────────────────────────────────────────────────────────────
   const startTransfer = useCallback(async (file) => {
     if (!file) return;
-
     if (file.size > maxBytes) {
-      setError(`File too large. Max size is ${isGuest ? '500 MB' : '5 GB'}.`);
+      setError(`File too large. Max is ${isGuest ? '500 MB' : '5 GB'}.`);
       setState('error');
       return;
     }
 
     transferAborted.current = false;
-    fileRef.current = file;
+    chunkSizeRef.current    = CHUNK_DEFAULT;
+    bytesSentRef.current    = 0;
+    speedBytesRef.current   = 0;
     setFileMeta({ name: file.name, size: file.size, mimeType: file.type });
     setState('waiting');
     setProgress(0); setSpeed(0); setEta(null); setError('');
 
     const socket = getSocket();
 
-    // ── Create room ──────────────────────────────────────────────────
+    // Create signaling room
     socket.emit('busy:create', (res) => {
       if (res?.error) { setError(res.error); setState('error'); return; }
       setCode(res.code);
     });
 
-    // ── Receiver joined → start WebRTC handshake ─────────────────────
+    // When receiver joins → WebRTC handshake
     socket.once('busy:receiver-joined', async () => {
       if (transferAborted.current) return;
       setState('connecting');
@@ -178,136 +177,108 @@ export function useBusyShare() {
       const pc = new RTCPeerConnection(RTC_CONFIG);
       pcRef.current = pc;
 
-      // Create 4 data channels
+      // Create NUM_CHANNELS ordered data channels
       const channels = Array.from({ length: NUM_CHANNELS }, (_, i) => {
         const dc = pc.createDataChannel(`busy-${i}`, {
-          ordered: false,      // unordered for max speed; we reorder by seq#
-          maxRetransmits: 10,
+          ordered: true,   // ordered per-channel; channels run in parallel
         });
         dc.binaryType = 'arraybuffer';
         return dc;
       });
       channelsRef.current = channels;
 
-      let openCount = 0;
-      channels.forEach(dc => {
-        dc.onopen = () => {
-          openCount++;
-          if (openCount === NUM_CHANNELS) {
-            // All channels open → start sending
-            sendFile();
-          }
-        };
-        dc.onerror = (e) => { console.error('[BusyShare] DC error:', e); };
-      });
-
-      // ICE
+      // ICE relay
       pc.onicecandidate = ({ candidate }) => {
         if (candidate) socket.emit('busy:ice', candidate);
       };
 
-      // Create offer
+      // Create & send offer
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       socket.emit('busy:offer', offer);
 
-      // Handle answer
+      // Wait for answer
       socket.once('busy:answer', async (answer) => {
         if (transferAborted.current) return;
         await pc.setRemoteDescription(answer);
+        // Wait for all channels to open, then start streaming
+        await Promise.all(channels.map(waitForOpen));
+        if (!transferAborted.current) sendFile(file, channels);
       });
     });
 
-    socket.on('busy:ice', async (candidate) => {
-      try { await pcRef.current?.addIceCandidate(candidate); } catch {}
-    });
-
+    socket.on('busy:ice', async (c) => { try { await pcRef.current?.addIceCandidate(c); } catch {} });
     socket.on('busy:cancelled',         () => { cleanup(); setState('cancelled'); });
     socket.on('busy:peer-disconnected', () => { cleanup(); setState('error'); setError('Receiver disconnected.'); });
     socket.on('busy:error',             ({ message }) => { cleanup(); setState('error'); setError(message); });
   }, [cleanup, isGuest, maxBytes]);
 
-  // ── Send file over 4 channels ─────────────────────────────────────────────
-  async function sendFile() {
-    const file    = fileRef.current;
-    const channels = channelsRef.current;
-    if (!file || channels.length !== NUM_CHANNELS) return;
+  // ── Send a channel's stripe of the file ───────────────────────────────────
+  async function sendStripe(dc, buffer, start, end, totalSize) {
+    let offset = start;
 
+    while (offset < end && !transferAborted.current) {
+      // Flow control: wait if channel buffer is saturated
+      while (dc.bufferedAmount > BUFFER_LIMIT && !transferAborted.current) {
+        await sleep(5);
+      }
+      if (transferAborted.current) break;
+
+      const cs         = chunkSizeRef.current;
+      const chunkEnd   = Math.min(offset + cs, end);
+      const chunkBytes = buffer.slice(offset, chunkEnd);
+
+      // Pack: [8 bytes: file offset as BigUint64][chunk bytes]
+      // Using file offset so receiver can write at exact position
+      const packed = new ArrayBuffer(8 + chunkBytes.byteLength);
+      const dv     = new DataView(packed);
+      dv.setBigUint64(0, BigInt(offset), false); // big-endian absolute offset
+      new Uint8Array(packed, 8).set(new Uint8Array(chunkBytes));
+
+      dc.send(packed);
+
+      const sent = chunkEnd - offset;
+      bytesSentRef.current  += sent;
+      speedBytesRef.current += sent;
+      offset = chunkEnd;
+    }
+
+    // Send per-channel done marker
+    if (!transferAborted.current) {
+      dc.send(JSON.stringify({ type: 'stripe-done' }));
+    }
+  }
+
+  async function sendFile(file, channels) {
     setState('transferring');
+    startSpeedTracker(file.size, true);
 
-    const totalBytes = file.size;
-    bytesSentRef.current = 0;
-    chunkSizeRef.current = CHUNK_DEFAULT;
-    startSpeedTracker(totalBytes, true);
+    const buffer    = await file.arrayBuffer();
+    const totalSize = file.size;
 
-    const buffer = await file.arrayBuffer();
-
-    // Build metadata frame (JSON string, not binary)
-    const chunkSize = chunkSizeRef.current;
-    const totalChunks = Math.ceil(totalBytes / chunkSize);
+    // Send metadata on channel 0 first
     const meta = JSON.stringify({
       type: 'meta',
       name: file.name,
-      size: totalBytes,
+      size: totalSize,
       mimeType: file.type || 'application/octet-stream',
-      totalChunks,
-      chunkSize,
       numChannels: NUM_CHANNELS,
     });
-    // Send meta on channel 0
     channels[0].send(meta);
 
-    // Send chunks
-    let seqNum = 0;
-    let offset = 0;
-
-    const sendChunk = () => new Promise((resolve) => {
-      const check = () => {
-        if (transferAborted.current) { resolve(); return; }
-
-        const cs = chunkSizeRef.current; // adaptive
-        const end = Math.min(offset + cs, totalBytes);
-        const chunk = buffer.slice(offset, end);
-        const chIdx = seqNum % NUM_CHANNELS;
-        const dc    = channels[chIdx];
-
-        // Flow control
-        if (dc.bufferedAmount > BUFFER_LIMIT) {
-          setTimeout(check, 10);
-          return;
-        }
-
-        // Pack: [4 bytes seq][chunk bytes]
-        const packed = new ArrayBuffer(4 + chunk.byteLength);
-        const view   = new DataView(packed);
-        view.setUint32(0, seqNum, false); // big-endian
-        new Uint8Array(packed, 4).set(new Uint8Array(chunk));
-
-        dc.send(packed);
-
-        const sent = end - offset;
-        bytesSentRef.current  += sent;
-        speedBytesRef.current += sent;
-        offset   = end;
-        seqNum++;
-        resolve();
-      };
-      check();
-    });
-
-    while (offset < totalBytes && !transferAborted.current) {
-      await sendChunk();
-    }
+    // Stripe the file across channels: each channel gets a contiguous slice
+    const stripeSize = Math.ceil(totalSize / NUM_CHANNELS);
+    await Promise.all(
+      channels.map((dc, i) => {
+        const start = i * stripeSize;
+        const end   = Math.min(start + stripeSize, totalSize);
+        return sendStripe(dc, buffer, start, end, totalSize);
+      })
+    );
 
     if (!transferAborted.current) {
-      // Send done signal on all channels
-      const done = JSON.stringify({ type: 'done' });
-      channels.forEach(dc => { try { dc.send(done); } catch {} });
-
       clearInterval(speedTimerRef.current);
-      setProgress(100);
-      setSpeed(0);
-      setEta(0);
+      setProgress(100); setSpeed(0); setEta(0);
       setState('done');
     }
   }
@@ -318,10 +289,14 @@ export function useBusyShare() {
   const joinTransfer = useCallback(async (transferCode) => {
     if (!transferCode || transferCode.length !== 6) return;
 
-    transferAborted.current = false;
+    transferAborted.current  = false;
+    doneCountRef.current     = 0;
+    receivedBytesRef.current = 0;
+    rxSpeedBytesRef.current  = 0;
+    receiveBufferRef.current = null;
+
     setState('connecting');
     setProgress(0); setSpeed(0); setEta(null); setError(''); setReceivedFile(null);
-    channelsReadyRef.current = 0;
 
     const socket = getSocket();
 
@@ -331,79 +306,65 @@ export function useBusyShare() {
       const pc = new RTCPeerConnection(RTC_CONFIG);
       pcRef.current = pc;
 
-      // Collect incoming data channels
-      const incomingChannels = [];
       let metaReceived = false;
 
       pc.ondatachannel = ({ channel }) => {
         channel.binaryType = 'arraybuffer';
-        incomingChannels.push(channel);
-        channelsRef.current = incomingChannels;
-
-        channel.onopen = () => {
-          channelsReadyRef.current++;
-        };
+        channelsRef.current = [...channelsRef.current, channel];
 
         channel.onmessage = ({ data }) => {
           if (transferAborted.current) return;
 
-          // String frames = metadata or done
           if (typeof data === 'string') {
             const msg = JSON.parse(data);
 
             if (msg.type === 'meta' && !metaReceived) {
               metaReceived = true;
-              receivedMetaRef.current = msg;
+              receivedMetaRef.current  = msg;
               receivedBytesRef.current = 0;
               rxSpeedBytesRef.current  = 0;
-
-              // Allocate reassembly buffer
-              receiveBufferRef.current  = new Uint8Array(msg.size);
-              receiveOffsetRef.current  = 0;
-
+              doneCountRef.current     = 0;
+              receiveBufferRef.current = new Uint8Array(msg.size);
               setFileMeta({ name: msg.name, size: msg.size, mimeType: msg.mimeType });
               setState('transferring');
               startSpeedTracker(msg.size, false);
             }
 
-            if (msg.type === 'done') {
-              clearInterval(rxSpeedTimerRef.current);
-              const meta = receivedMetaRef.current;
-              const arr  = receiveBufferRef.current;
-
-              const blob = new Blob([arr], { type: meta?.mimeType || 'application/octet-stream' });
-              const url  = URL.createObjectURL(blob);
-
-              setReceivedFile({ name: meta?.name || 'download', size: meta?.size || blob.size, mimeType: meta?.mimeType, blob, url });
-              setProgress(100); setSpeed(0); setEta(0);
-              setState('done');
+            if (msg.type === 'stripe-done') {
+              doneCountRef.current++;
+              if (doneCountRef.current === NUM_CHANNELS) {
+                // All stripes received → assemble
+                clearInterval(rxSpeedTimerRef.current);
+                const meta = receivedMetaRef.current;
+                const arr  = receiveBufferRef.current;
+                const blob = new Blob([arr], { type: meta?.mimeType || 'application/octet-stream' });
+                const url  = URL.createObjectURL(blob);
+                setReceivedFile({ name: meta?.name || 'download', size: meta?.size || blob.size, mimeType: meta?.mimeType, blob, url });
+                setProgress(100); setSpeed(0); setEta(0);
+                setState('done');
+              }
             }
             return;
           }
 
-          // Binary frame: [4 bytes seq][chunk]
+          // Binary chunk: [8 bytes absolute offset][data]
           if (data instanceof ArrayBuffer && receiveBufferRef.current) {
-            const view      = new DataView(data);
-            // Unused seq number kept for future selective-ack; we just stream in order
-            // const seqNum = view.getUint32(0, false);
-            const chunkData = new Uint8Array(data, 4);
-            const offset    = receiveOffsetRef.current;
+            const dv        = new DataView(data);
+            const offset    = Number(dv.getBigUint64(0, false));
+            const chunkData = new Uint8Array(data, 8);
 
             receiveBufferRef.current.set(chunkData, offset);
-            receiveOffsetRef.current += chunkData.byteLength;
 
-            receivedBytesRef.current  += chunkData.byteLength;
-            rxSpeedBytesRef.current   += chunkData.byteLength;
+            receivedBytesRef.current += chunkData.byteLength;
+            rxSpeedBytesRef.current  += chunkData.byteLength;
           }
         };
       };
 
-      // ICE
       pc.onicecandidate = ({ candidate }) => {
         if (candidate) socket.emit('busy:ice', candidate);
       };
 
-      // Handle offer
       socket.once('busy:offer', async (offer) => {
         if (transferAborted.current) return;
         await pc.setRemoteDescription(offer);
@@ -412,42 +373,31 @@ export function useBusyShare() {
         socket.emit('busy:answer', answer);
       });
 
-      socket.on('busy:ice', async (candidate) => {
-        try { await pc.addIceCandidate(candidate); } catch {}
-      });
-
+      socket.on('busy:ice', async (c) => { try { await pc.addIceCandidate(c); } catch {} });
       socket.on('busy:cancelled',         () => { cleanup(); setState('cancelled'); });
       socket.on('busy:peer-disconnected', () => { cleanup(); setState('error'); setError('Sender disconnected.'); });
       socket.on('busy:error',             ({ message }) => { cleanup(); setState('error'); setError(message); });
     });
   }, [cleanup]);
 
-  // ── Cancel ────────────────────────────────────────────────────────────────
+  // ── Cancel / Reset ────────────────────────────────────────────────────────
   const cancel = useCallback(() => {
     socketRef.current?.emit('busy:cancel');
     cleanup();
     setState('cancelled');
   }, [cleanup]);
 
-  // ── Reset ─────────────────────────────────────────────────────────────────
   const reset = useCallback(() => {
     cleanup();
     setState('idle');
-    setCode('');
-    setProgress(0);
-    setSpeed(0);
-    setEta(null);
-    setError('');
-    setReceivedFile(null);
-    setFileMeta(null);
+    setCode(''); setProgress(0); setSpeed(0); setEta(null);
+    setError(''); setReceivedFile(null); setFileMeta(null);
     transferAborted.current = false;
   }, [cleanup]);
 
   return {
-    // State
     state, code, progress, speed, eta, error, fileMeta, receivedFile,
     maxBytes, isGuest,
-    // Actions
     startTransfer, joinTransfer, cancel, reset,
   };
 }
