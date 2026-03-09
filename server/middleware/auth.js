@@ -22,3 +22,25 @@ export async function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'Token verification failed' });
   }
 }
+
+/**
+ * Middleware: optionally verifies Supabase JWT.
+ * If Authorization header is present and valid → attaches req.user.
+ * If absent or invalid → sets req.user = null (guest mode) and continues.
+ */
+export async function optionalAuth(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    req.user = null;
+    return next();
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    req.user = (!error && user) ? user : null;
+  } catch {
+    req.user = null;
+  }
+  next();
+}

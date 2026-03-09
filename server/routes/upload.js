@@ -5,13 +5,14 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { v4 as uuidv4 } from "uuid";
 import r2Client, { BUCKET_NAME } from "../s3.js";
 import supabase from "../supabase.js";
-import { requireAuth } from "../middleware/auth.js";
+import { optionalAuth } from "../middleware/auth.js";
 import { checkUsageLimit, incrementUsage } from "./usage.js";
 
 const router = express.Router();
 const PASSCODE_LENGTH = 6;
 const PASSCODE_MAX = 10 ** PASSCODE_LENGTH;
 const FREE_FILE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const GUEST_MAX_BYTES = 500 * 1024 * 1024; // 500 MB
 const MAX_PAID_EXPIRY_HOURS = 72;
 const SUPPORTED_PLAN_GB = new Set([1, 3, 5, 10]);
 
@@ -56,8 +57,9 @@ function getFilePolicyForUser(user) {
   };
 }
 
-// POST /api/upload
-router.post("/", requireAuth, upload.single("file"), async (req, res) => {
+// POST /api/upload — guests (no auth) get 500 MB / 30 min / 1 download
+// Authenticated users get their plan-based policy
+router.post("/", optionalAuth, upload.single("file"), async (req, res) => {
   const tmpPath = req.file?.path;
 
   try {
@@ -65,23 +67,37 @@ router.post("/", requireAuth, upload.single("file"), async (req, res) => {
       return res.status(400).json({ error: "No file provided" });
     }
 
-    // ── Usage limit check ─────────────────────────────────────────────
-    const { allowed, used } = await checkUsageLimit(req.user.id, req.file.size);
-    if (!allowed) {
-      fs.unlink(tmpPath, () => {}); // clean up temp file
-      return res.status(402).json({
-        error: "limit_exceeded",
-        message:
-          "Monthly storage limit reached. Upgrade to continue uploading.",
-        bytesUsed: used,
-        freeLimit: 8 * 1024 * 1024 * 1024,
+    const { originalname, mimetype, size } = req.file;
+    const isGuest = !req.user;
+
+    // ── Guest: enforce 500 MB cap ─────────────────────────────────────
+    if (isGuest && size > GUEST_MAX_BYTES) {
+      fs.unlink(tmpPath, () => {});
+      return res.status(413).json({
+        error: "guest_limit_exceeded",
+        message: "Guest uploads are limited to 500 MB. Sign in to upload up to 8 GB.",
+        maxBytes: GUEST_MAX_BYTES,
       });
     }
 
-    const { originalname, mimetype, size } = req.file;
+    // ── Authenticated: usage limit check ──────────────────────────────
+    if (!isGuest) {
+      const { allowed, used } = await checkUsageLimit(req.user.id, size);
+      if (!allowed) {
+        fs.unlink(tmpPath, () => {});
+        return res.status(402).json({
+          error: "limit_exceeded",
+          message: "Monthly storage limit reached. Upgrade to continue uploading.",
+          bytesUsed: used,
+          freeLimit: 8 * 1024 * 1024 * 1024,
+        });
+      }
+    }
     const fileId = uuidv4();
     const key = `uploads/${fileId}/${originalname}`;
-    const filePolicy = getFilePolicyForUser(req.user);
+    const filePolicy = isGuest
+      ? { planGb: 0, expiryMs: FREE_FILE_TTL_MS, maxDownloads: 1 }
+      : getFilePolicyForUser(req.user);
 
     // Stream file from disk → R2 (avoids loading 8 GB into RAM)
     const fileStream = fs.createReadStream(tmpPath);
@@ -131,7 +147,7 @@ router.post("/", requireAuth, upload.single("file"), async (req, res) => {
     // Save metadata to Supabase with plan-based expiry/download policy
     const { error: dbError } = await supabase.from("files").insert({
       id: fileId,
-      user_id: req.user.id,
+      user_id: req.user?.id ?? null,
       filename: originalname,
       url: fileUrl,
       r2_key: key,
@@ -152,8 +168,10 @@ router.post("/", requireAuth, upload.single("file"), async (req, res) => {
       });
     }
 
-    // Increment monthly bandwidth usage (fire-and-forget)
-    setImmediate(() => incrementUsage(req.user.id, size));
+    // Increment monthly bandwidth usage for authenticated users only
+    if (!isGuest) {
+      setImmediate(() => incrementUsage(req.user.id, size));
+    }
 
     return res.status(200).json({
       passcode,

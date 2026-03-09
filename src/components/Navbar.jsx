@@ -7,8 +7,10 @@ import {
   ArrowRightOnRectangleIcon,
   ShareIcon,
   CloudArrowUpIcon,
-  CloudArrowDownIcon,
+  ClipboardDocumentIcon,
   UserCircleIcon,
+  ArrowRightIcon,
+  BoltIcon,
 } from "@heroicons/react/24/outline";
 
 export default function Navbar() {
@@ -24,11 +26,13 @@ export default function Navbar() {
 
   const isActive = (path) => location.pathname === path;
 
-  const tabs = [
-    { to: "/", label: "Send", icon: CloudArrowUpIcon },
-    { to: "/receive", label: "Receive", icon: CloudArrowDownIcon },
-    { to: "/profile", label: "Profile", icon: UserCircleIcon },
+  const allTabs = [
+    { to: "/", label: "Files", icon: CloudArrowUpIcon },
+    { to: "/busy-share", label: "BusyShare", icon: BoltIcon },
+    { to: "/clipboard", label: "Clipboard", icon: ClipboardDocumentIcon },
+    { to: "/profile", label: "Profile", icon: UserCircleIcon, authOnly: true },
   ];
+  const tabs = allTabs.filter((t) => !t.authOnly || !!user);
 
   return (
     <>
@@ -48,7 +52,7 @@ export default function Navbar() {
             </span>
           </Link>
 
-          {/* Right: theme + sign out */}
+          {/* Right: theme toggle + auth action */}
           <div className="flex items-center gap-1">
             <button
               onClick={toggleTheme}
@@ -61,7 +65,7 @@ export default function Navbar() {
                 <MoonIcon className="w-5 h-5" />
               )}
             </button>
-            {user && (
+            {user ? (
               <button
                 onClick={handleSignOut}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/10 transition-all duration-200"
@@ -69,6 +73,15 @@ export default function Navbar() {
                 <ArrowRightOnRectangleIcon className="w-4 h-4" />
                 <span className="hidden sm:inline text-sm">Sign out</span>
               </button>
+            ) : (
+              <Link
+                to="/login"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/10 transition-all duration-200"
+              >
+                <UserCircleIcon className="w-4 h-4" />
+                <span className="hidden sm:inline text-sm">Sign in</span>
+                <ArrowRightIcon className="w-3.5 h-3.5" />
+              </Link>
             )}
           </div>
         </div>
