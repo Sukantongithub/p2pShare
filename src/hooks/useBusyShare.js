@@ -19,11 +19,11 @@ import { io as socketIO } from 'socket.io-client';
 import { useAuth } from './useAuth';
 
 // ── Tuning constants ──────────────────────────────────────────────────────────
-const CHUNK_MIN      = 64   * 1024;       // 64 KB — slow connections
-const CHUNK_DEFAULT  = 256  * 1024;       // 256 KB — typical
-const CHUNK_MAX      = 512  * 1024;       // 512 KB — fast local / LAN
-const BUFFER_HIGH    = 16  * 1024 * 1024; // 16 MB — pause sending
-const BUFFER_LOW     = 4   * 1024 * 1024; // 4 MB  — resume threshold
+const CHUNK_MIN      = 16  * 1024;        // 16 KB  — very slow / mobile
+const CHUNK_DEFAULT  = 64  * 1024;        // 64 KB  — default (mobile-safe)
+const CHUNK_MAX      = 256 * 1024;        // 256 KB — fast LAN / desktop
+const BUFFER_HIGH    = 4   * 1024 * 1024; // 4 MB  — pause  (mobile-safe)
+const BUFFER_LOW     = 512 * 1024;        // 512 KB — resume (mobile-safe threshold)
 const SPEED_MS       = 500;               // speed sample window
 
 const GUEST_MAX = 500 * 1024 * 1024;      // 500 MB
@@ -131,16 +131,32 @@ export function useBusyShare() {
     }, SPEED_MS);
   }
 
-  // ── Wait for DC buffer to drain ───────────────────────────────────────────
+  // ── Wait for DC buffer to drain (with polling fallback for mobile) ───────────
   function waitForBufferDrain(dc) {
     return new Promise((resolve) => {
-      // Already drained
-      if (dc.bufferedAmount < BUFFER_LOW) { resolve(); return; }
+      if (dc.readyState !== 'open' || dc.bufferedAmount < BUFFER_LOW) {
+        resolve();
+        return;
+      }
+
+      let settled = false;
+      const done = () => { if (!settled) { settled = true; resolve(); } };
+
+      // Primary path: native event (desktop browsers)
       const prev = dc.onbufferedamountlow;
       dc.onbufferedamountlow = () => {
         dc.onbufferedamountlow = prev;
-        resolve();
+        done();
       };
+
+      // Fallback path: 50 ms poll (mobile browsers don't always fire the event)
+      const poll = setInterval(() => {
+        if (dc.readyState !== 'open' || dc.bufferedAmount < BUFFER_LOW) {
+          clearInterval(poll);
+          dc.onbufferedamountlow = prev;
+          done();
+        }
+      }, 50);
     });
   }
 
@@ -236,11 +252,18 @@ export function useBusyShare() {
     const total = file.size;
 
     while (offset < total && !abortedRef.current) {
-      // Pause if buffer is saturated → wait for drain event
+      // Guard: channel may close if mobile goes to background
+      if (dc.readyState !== 'open') {
+        setError('Connection lost. Please try again.');
+        setState('error');
+        return;
+      }
+
+      // Pause if buffer is saturated → wait for drain event + poll fallback
       if (dc.bufferedAmount >= BUFFER_HIGH) {
         await waitForBufferDrain(dc);
       }
-      if (abortedRef.current) break;
+      if (abortedRef.current || dc.readyState !== 'open') break;
 
       const cs    = chunkSizeRef.current;
       const end   = Math.min(offset + cs, total);
