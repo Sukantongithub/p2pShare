@@ -143,9 +143,6 @@ function SendTab() {
               <p className="text-slate-900 dark:text-white font-semibold truncate">{fileMeta?.name}</p>
               <p className="text-slate-500 dark:text-slate-400 text-xs">{fmtBytes(fileMeta?.size)}</p>
             </div>
-            <span className="shrink-0 px-2 py-1 rounded-lg bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-xs font-semibold">
-              4 channels
-            </span>
           </div>
 
           {state === "connecting" ? (
