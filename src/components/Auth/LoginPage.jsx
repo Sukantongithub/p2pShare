@@ -323,16 +323,17 @@ export default function LoginPage() {
             <div className="flex-1 h-px" style={{ background: dividerClr }} />
           </div>
 
-          {/* Receive file CTA */}
+          {/* Guest CTA */}
           <a
-            href="/receive"
+            href="/"
             className="flex items-center justify-center gap-2 w-full py-3 rounded-xl font-semibold text-sm transition-all duration-200"
             style={{ background: ctaBg, border: `2px solid ${ctaBorder}`, color: ctaClr }}
             onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.8"; }}
             onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
           >
-            🔑 I have a passcode — Receive a file
+            🚀 Continue as Guest — no account needed
           </a>
+
 
           <p className="text-center text-xs mt-6" style={{ color: termsClr }}>
             By continuing you agree to our{" "}

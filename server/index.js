@@ -1,4 +1,6 @@
 import express from 'express';
+import http from 'http';
+import { Server as SocketServer } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
@@ -15,6 +17,8 @@ import uploadRouter from './routes/upload.js';
 import downloadRouter from './routes/download.js';
 import authRouter from './routes/auth.js';
 import usageRouter from './routes/usage.js';
+import clipboardRouter from './routes/clipboard.js';
+import { attachSignaling } from './signaling.js';
 import r2Client, { BUCKET_NAME } from './s3.js';
 import supabase from './supabase.js';
 
@@ -58,6 +62,12 @@ async function cleanupExpiredFiles() {
       .select('id, filename, r2_key')
       .lt('expires_at', nowIso)
       .limit(100);
+
+    // Also clean up expired clipboard entries
+    await supabase
+      .from('clipboard_entries')
+      .delete()
+      .lt('expires_at', nowIso);
 
     if (error) {
       console.error('Expired cleanup query failed:', error.message);
@@ -103,6 +113,7 @@ app.use('/api/upload', uploadRouter);
 app.use('/api/download', downloadRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/usage', usageRouter);
+app.use('/api/clipboard', clipboardRouter);
 
 // 404 handler
 app.use((_req, res) => {
@@ -115,6 +126,18 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ P2PShare API running on port ${PORT}`);
+const httpServer = http.createServer(app);
+
+// Attach Socket.io for Busy Share signaling
+const io = new SocketServer(httpServer, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+});
+attachSignaling(io);
+
+httpServer.listen(PORT, () => {
+  console.log(`✅ P2PShare API + Busy Share signaling running on port ${PORT}`);
 });

@@ -2,9 +2,10 @@ import { useCallback, useState } from 'react';
 import { ArrowUpTrayIcon, DocumentIcon, XCircleIcon } from '@heroicons/react/24/outline';
 import { showNotification } from './Notification';
 
-const MAX_BYTES = 8 * 1024 * 1024 * 1024; // 8 GB
+const DEFAULT_MAX_BYTES = 8 * 1024 * 1024 * 1024; // 8 GB
 
-export default function DragDropUpload({ onFileSelect, disabled }) {
+export default function DragDropUpload({ onFileSelect, disabled, maxBytes }) {
+  const MAX_BYTES = maxBytes ?? DEFAULT_MAX_BYTES;
   const [dragging, setDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
 
@@ -33,9 +34,9 @@ export default function DragDropUpload({ onFileSelect, disabled }) {
     onFileSelect(null);
   };
 
-  const formatSize = (bytes) => {
-    if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
-    if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  const formatLimit = (bytes) => {
+    if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(0)} GB`;
+    if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(0)} MB`;
     return `${(bytes / 1024).toFixed(0)} KB`;
   };
 
@@ -49,7 +50,7 @@ export default function DragDropUpload({ onFileSelect, disabled }) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-slate-900 dark:text-white font-medium truncate">{selectedFile.name}</p>
-            <p className="text-slate-500 dark:text-slate-400 text-sm">{formatSize(selectedFile.size)}</p>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">{formatLimit(selectedFile.size)}</p>
           </div>
           {!disabled && (
             <button onClick={clearFile} className="text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors flex-shrink-0">
@@ -89,7 +90,7 @@ export default function DragDropUpload({ onFileSelect, disabled }) {
             <p className="text-slate-800 dark:text-white font-semibold mb-1">
               {dragging ? 'Drop it here!' : 'Drag & drop your file'}
             </p>
-            <p className="text-slate-500 dark:text-slate-400 text-sm">or click to browse · max 8 GB</p>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">or click to browse · max {formatLimit(MAX_BYTES)}</p>
           </div>
           <input type="file" className="hidden" onChange={onInputChange} disabled={disabled} />
         </label>

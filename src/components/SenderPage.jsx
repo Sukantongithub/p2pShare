@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import { useAuth } from "../hooks/useAuth";
 import DragDropUpload from "./DragDropUpload";
 import ProgressBar from "./ProgressBar";
 import UpgradeModal from "./UpgradeModal";
@@ -11,10 +13,13 @@ import {
   CloudArrowUpIcon,
   LockClosedIcon,
   ChartBarIcon,
+  ArrowRightIcon,
+  UserCircleIcon,
 } from "@heroicons/react/24/outline";
 
 const API_BASE = import.meta.env.DEV ? "" : import.meta.env.VITE_API_URL || "";
-const FREE_LIMIT = 8 * 1024 ** 3;
+const FREE_LIMIT = 8 * 1024 ** 3;      // 8 GB for registered users
+const GUEST_LIMIT = 500 * 1024 ** 2;   // 500 MB for guests
 
 function fmtBytes(bytes) {
   if (!bytes) return "0 B";
@@ -24,6 +29,9 @@ function fmtBytes(bytes) {
 }
 
 export default function SenderPage() {
+  const { user } = useAuth();
+  const isGuest = !user;
+
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -36,7 +44,7 @@ export default function SenderPage() {
 
   const usedBytes = usage?.bytesUsed ?? 0;
   const usedPct = Math.min((usedBytes / FREE_LIMIT) * 100, 100);
-  const isAtLimit = usedBytes >= FREE_LIMIT;
+  const isAtLimit = !isGuest && usedBytes >= FREE_LIMIT;
 
   const handleUpload = async () => {
     if (!file) return;
@@ -51,17 +59,21 @@ export default function SenderPage() {
     setResult(null);
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) throw new Error("Not authenticated");
-
       const formData = new FormData();
       formData.append("file", file);
 
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${API_BASE}/api/upload`);
-      xhr.setRequestHeader("Authorization", `Bearer ${session.access_token}`);
+
+      // Only attach auth header for signed-in users
+      if (!isGuest) {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session) {
+          xhr.setRequestHeader("Authorization", `Bearer ${session.access_token}`);
+        }
+      }
 
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) setProgress((e.loaded / e.total) * 100);
@@ -74,13 +86,14 @@ export default function SenderPage() {
           setResult(data);
           setFile(null);
           showNotification("File uploaded!", "success");
-          refetchUsage();
+          if (!isGuest) refetchUsage();
         } else if (xhr.status === 402) {
           setShowUpgrade(true);
         } else {
           const data = JSON.parse(xhr.responseText);
-          setError(data.error || "Upload failed");
-          showNotification(data.error || "Upload failed", "error");
+          const msg = data.message || data.error || "Upload failed";
+          setError(msg);
+          showNotification(msg, "error");
         }
       };
 
@@ -126,17 +139,56 @@ export default function SenderPage() {
             </span>
           </h1>
           <p className="text-slate-700 dark:text-slate-400 text-sm sm:text-base">
-            Upload files up to{" "}
-            <span className="font-medium text-indigo-500">8 GB</span>. Files are{" "}
-            <span className="font-medium text-rose-500 dark:text-rose-400">
-              permanently deleted
-            </span>{" "}
-            after the first download.
+            {isGuest ? (
+              <>
+                Upload files up to{" "}
+                <span className="font-medium text-amber-500">500 MB</span> as a
+                guest. Files are{" "}
+                <span className="font-medium text-rose-500 dark:text-rose-400">
+                  permanently deleted
+                </span>{" "}
+                after the first download.
+              </>
+            ) : (
+              <>
+                Upload files up to{" "}
+                <span className="font-medium text-indigo-500">8 GB</span>. Files
+                are{" "}
+                <span className="font-medium text-rose-500 dark:text-rose-400">
+                  permanently deleted
+                </span>{" "}
+                after the first download.
+              </>
+            )}
           </p>
         </div>
 
-        {/* ── Monthly usage bar ── */}
-        {usage && (
+        {/* ── Guest banner ── */}
+        {isGuest && (
+          <div className="mb-5 p-4 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 fade-in">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-amber-800 dark:text-amber-300 text-sm font-semibold">
+                  🚀 Guest Mode
+                </p>
+                <p className="text-amber-700 dark:text-amber-400/80 text-xs mt-0.5">
+                  500 MB limit · 1 download · 30 min expiry · No upload history
+                </p>
+              </div>
+              <Link
+                to="/login"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold transition-all duration-200 shrink-0"
+              >
+                <UserCircleIcon className="w-3.5 h-3.5" />
+                Sign in for 8 GB
+                <ArrowRightIcon className="w-3 h-3" />
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* ── Monthly usage bar (authenticated only) ── */}
+        {!isGuest && usage && (
           <div
             className={`mb-5 p-4 rounded-xl border transition-colors duration-300 ${
               isAtLimit
@@ -186,6 +238,7 @@ export default function SenderPage() {
           <DragDropUpload
             onFileSelect={setFile}
             disabled={uploading || isAtLimit}
+            maxBytes={isGuest ? GUEST_LIMIT : FREE_LIMIT}
           />
 
           {file && !uploading && (
@@ -205,7 +258,7 @@ export default function SenderPage() {
                 </>
               ) : (
                 <>
-                  <CloudArrowUpIcon className="w-5 h-5" /> Upload & Generate
+                  <CloudArrowUpIcon className="w-5 h-5" /> Upload &amp; Generate
                   Passcode
                 </>
               )}
@@ -285,6 +338,20 @@ export default function SenderPage() {
                 </>
               )}
             </button>
+
+            {isGuest && (
+              <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl text-center">
+                <p className="text-amber-700 dark:text-amber-400 text-xs">
+                  Want to track your uploads?{" "}
+                  <Link
+                    to="/login"
+                    className="font-semibold underline hover:text-amber-600"
+                  >
+                    Sign in for history &amp; 8 GB uploads →
+                  </Link>
+                </p>
+              </div>
+            )}
 
             <p className="text-center text-slate-600 dark:text-slate-500 text-xs mt-3">
               Share at <span className="text-indigo-500">/receive</span>
