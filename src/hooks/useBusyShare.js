@@ -1,8 +1,17 @@
 /**
- * BusyShare with LAN Turbo Mode
- * - Detects LAN via ICE host candidates
- * - Uses 4 data channels by default
- * - Upgrades to 6 channels + larger chunks/buffer on LAN
+ * useBusyShare — Reliable WebRTC P2P file transfer hook
+ *
+ * Design decisions vs previous version:
+ *  - SINGLE ordered DataChannel  →  eliminates race conditions with multi-channel
+ *  - File.slice() per chunk       →  never loads entire file into RAM, no freeze
+ *  - onbufferedamountlow event    →  event-driven backpressure, no busy-wait sleep
+ *  - ArrayBuffer chunks only      →  no base64 overhead
+ *  - Adaptive chunk size          →  64 KB → 512 KB based on measured throughput
+ *
+ * Transfer protocol:
+ *   1. meta JSON   → { type:'meta', name, size, mimeType }
+ *   2. N × binary  → raw ArrayBuffer chunk (no header needed; ordered channel)
+ *   3. done JSON   → { type:'done' }
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -10,27 +19,21 @@ import { io as socketIO } from "socket.io-client";
 import { useAuth } from "./useAuth";
 
 // ── Tuning constants ──────────────────────────────────────────────────────────
-const DEFAULT_TUNING = {
-  chunkSize: 256 * 1024,
-  numChannels: 4,
-  bufferLimit: 8 * 1024 * 1024,
-};
-
-const LAN_TUNING = {
-  chunkSize: 512 * 1024,
-  numChannels: 6,
-  bufferLimit: 16 * 1024 * 1024,
-};
-
-const MIN_CHUNK_SIZE = 32 * 1024;
-
+const CHUNK_MIN = 32 * 1024; // 32 KB
+const CHUNK_DEFAULT = 128 * 1024; // 128 KB
+const CHUNK_MAX = 512 * 1024; // 512 KB
+const BUFFER_HIGH = 8 * 1024 * 1024; // 8 MB
+const BUFFER_LOW = 1 * 1024 * 1024; // 1 MB
 const SPEED_MS = 500; // speed sample window
 
 const GUEST_MAX = 500 * 1024 * 1024; // 500 MB
 const FREE_MAX = 5 * 1024 ** 3; // 5 GB
 
 const ICE_SERVERS = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+  ],
 };
 
 const API_BASE = import.meta.env.DEV ? "" : import.meta.env.VITE_API_URL || "";
@@ -50,23 +53,15 @@ export function useBusyShare() {
   const [error, setError] = useState("");
   const [fileMeta, setFileMeta] = useState(null); // { name, size, mimeType }
   const [receivedFile, setReceivedFile] = useState(null); // { name, size, url }
-  const [isLANMode, setIsLANMode] = useState(false);
 
   // ── Internal refs (mutations don't cause re-render) ───────────────────────
   const socketRef = useRef(null);
   const pcRef = useRef(null);
-  const controlDcRef = useRef(null);
-  const dataChannelsRef = useRef([]);
+  const dcRef = useRef(null); // the one DataChannel
   const abortedRef = useRef(false);
-  const tuningRef = useRef({ ...DEFAULT_TUNING });
-  const dynamicChunkSizeRef = useRef(DEFAULT_TUNING.chunkSize);
-  const activeLaneCountRef = useRef(DEFAULT_TUNING.numChannels);
-  const channelFailCountRef = useRef(new Map());
-  const excludedChannelsRef = useRef(new Set());
-  const localCandidateRef = useRef(false);
-  const remoteCandidateRef = useRef(false);
 
   // Speed tracking
+  const chunkSizeRef = useRef(CHUNK_DEFAULT);
   const sentRef = useRef(0); // bytes sent / received
   const windowRef = useRef(0); // bytes in current speed window
   const speedTimer = useRef(null);
@@ -74,53 +69,6 @@ export function useBusyShare() {
   // Receiver assembly
   const rxChunks = useRef([]); // ArrayBuffer[] collected in order
   const rxMeta = useRef(null);
-  const rxPendingMapRef = useRef(new Map());
-  const rxNextIndexRef = useRef(0);
-  const rxTotalChunksRef = useRef(null);
-
-  function isLocalIP(ip) {
-    if (!ip || ip.includes(":")) return false;
-
-    if (/^192\.168\./.test(ip)) return true;
-    if (/^10\./.test(ip)) return true;
-
-    const m = ip.match(/^172\.(\d{1,3})\./);
-    if (m) {
-      const second = Number(m[1]);
-      return second >= 16 && second <= 31;
-    }
-
-    return false;
-  }
-
-  function extractIpFromCandidate(candidateStr) {
-    if (!candidateStr) return null;
-    const parts = candidateStr.split(" ");
-    if (parts.length < 5) return null;
-    return parts[4] || null;
-  }
-
-  function maybeEnableLANMode() {
-    if (localCandidateRef.current && remoteCandidateRef.current && !isLANMode) {
-      setIsLANMode(true);
-      tuningRef.current = { ...LAN_TUNING };
-      console.log("LAN Turbo Mode Activated");
-    }
-  }
-
-  function inspectCandidateForLan(candidateObj, isLocalSide) {
-    const candidate = candidateObj?.candidate || "";
-    if (!candidate.includes(" typ host")) return;
-    const ip = extractIpFromCandidate(candidate);
-    if (!isLocalIP(ip)) return;
-
-    if (isLocalSide) {
-      localCandidateRef.current = true;
-    } else {
-      remoteCandidateRef.current = true;
-    }
-    maybeEnableLANMode();
-  }
 
   // ── Socket (created lazily, reused) ──────────────────────────────────────
   function getSocket() {
@@ -145,19 +93,12 @@ export function useBusyShare() {
     clearInterval(speedTimer.current);
     speedTimer.current = null;
 
-    if (controlDcRef.current) {
+    if (dcRef.current) {
       try {
-        controlDcRef.current.close();
+        dcRef.current.close();
       } catch {}
-      controlDcRef.current = null;
+      dcRef.current = null;
     }
-    for (const ch of dataChannelsRef.current) {
-      try {
-        ch.close();
-      } catch {}
-    }
-    dataChannelsRef.current = [];
-
     if (pcRef.current) {
       try {
         pcRef.current.close();
@@ -173,19 +114,6 @@ export function useBusyShare() {
     windowRef.current = 0;
     rxChunks.current = [];
     rxMeta.current = null;
-    rxPendingMapRef.current = new Map();
-    rxNextIndexRef.current = 0;
-    rxTotalChunksRef.current = null;
-
-    dynamicChunkSizeRef.current = DEFAULT_TUNING.chunkSize;
-    activeLaneCountRef.current = DEFAULT_TUNING.numChannels;
-    channelFailCountRef.current = new Map();
-    excludedChannelsRef.current = new Set();
-
-    localCandidateRef.current = false;
-    remoteCandidateRef.current = false;
-    setIsLANMode(false);
-    tuningRef.current = { ...DEFAULT_TUNING };
   }, []);
 
   useEffect(() => cleanup, [cleanup]);
@@ -195,6 +123,7 @@ export function useBusyShare() {
     clearInterval(speedTimer.current);
     sentRef.current = 0;
     windowRef.current = 0;
+    chunkSizeRef.current = CHUNK_DEFAULT;
 
     speedTimer.current = setInterval(() => {
       const bps = (windowRef.current / SPEED_MS) * 1000;
@@ -204,50 +133,46 @@ export function useBusyShare() {
       const done = sentRef.current;
       setProgress(Math.min((done / totalBytes) * 100, 99));
       if (bps > 0) setEta(Math.ceil((totalBytes - done) / bps));
+
+      // Adaptive chunk size
+      if (bps < 4_000_000) chunkSizeRef.current = CHUNK_MIN;
+      else if (bps > 24_000_000) chunkSizeRef.current = CHUNK_MAX;
+      else chunkSizeRef.current = CHUNK_DEFAULT;
     }, SPEED_MS);
   }
 
-  // ── Wait for channels buffer to drain ───────────────────────────────────
-  function waitForChannelsDrain(channels, highLimit) {
+  // ── Wait for DC buffer to drain (with polling fallback for mobile) ───────────
+  function waitForBufferDrain(dc) {
     return new Promise((resolve) => {
-      const lowLimit = Math.floor(highLimit / 2);
-
-      const getTotalBuffered = () =>
-        channels.reduce(
-          (sum, ch) =>
-            sum + (ch?.readyState === "open" ? ch.bufferedAmount : 0),
-          0,
-        );
-
-      if (getTotalBuffered() < lowLimit) {
+      if (dc.readyState !== "open" || dc.bufferedAmount < BUFFER_LOW) {
         resolve();
         return;
       }
 
-      const poll = setInterval(() => {
-        if (getTotalBuffered() < lowLimit) {
-          clearInterval(poll);
+      let settled = false;
+      const done = () => {
+        if (!settled) {
+          settled = true;
           resolve();
         }
-      }, 25);
-    });
-  }
+      };
 
-  async function waitForUsableSenderChannels(
-    control,
-    channels,
-    timeoutMs = 15000,
-  ) {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs && !abortedRef.current) {
-      const controlOpen = control?.readyState === "open";
-      const openDataCount = channels.filter(
-        (ch) => ch.readyState === "open",
-      ).length;
-      if (controlOpen && openDataCount > 0) return true;
-      await new Promise((r) => setTimeout(r, 50));
-    }
-    return false;
+      // Primary path: native event (desktop browsers)
+      const prev = dc.onbufferedamountlow;
+      dc.onbufferedamountlow = () => {
+        dc.onbufferedamountlow = prev;
+        done();
+      };
+
+      // Fallback path: 50 ms poll (mobile browsers don't always fire the event)
+      const poll = setInterval(() => {
+        if (dc.readyState !== "open" || dc.bufferedAmount < BUFFER_LOW) {
+          clearInterval(poll);
+          dc.onbufferedamountlow = prev;
+          done();
+        }
+      }, 50);
+    });
   }
 
   // ── Attach common error/cancel socket listeners ───────────────────────────
@@ -267,7 +192,6 @@ export function useBusyShare() {
       setError(message);
     });
     socket.on("busy:ice", async (c) => {
-      inspectCandidateForLan(c, false);
       try {
         await pcRef.current?.addIceCandidate(c);
       } catch {}
@@ -295,14 +219,6 @@ export function useBusyShare() {
       setEta(null);
       setError("");
       setCode("");
-      setIsLANMode(false);
-      tuningRef.current = { ...DEFAULT_TUNING };
-      dynamicChunkSizeRef.current = DEFAULT_TUNING.chunkSize;
-      activeLaneCountRef.current = DEFAULT_TUNING.numChannels;
-      channelFailCountRef.current = new Map();
-      excludedChannelsRef.current = new Set();
-      localCandidateRef.current = false;
-      remoteCandidateRef.current = false;
 
       const socket = getSocket();
       attachSocketEvents(socket);
@@ -323,25 +239,14 @@ export function useBusyShare() {
         const pc = new RTCPeerConnection(ICE_SERVERS);
         pcRef.current = pc;
 
-        // Control channel + data channels
-        const control = pc.createDataChannel("busy-control", { ordered: true });
-        control.binaryType = "arraybuffer";
-        controlDcRef.current = control;
-
-        const numChannels = tuningRef.current.numChannels;
-        const channels = [];
-        for (let i = 0; i < numChannels; i++) {
-          const ch = pc.createDataChannel(`busy-data-${i}`, { ordered: true });
-          ch.binaryType = "arraybuffer";
-          channels.push(ch);
-        }
-        dataChannelsRef.current = channels;
+        // Single ordered DataChannel
+        const dc = pc.createDataChannel("busy", { ordered: true });
+        dc.binaryType = "arraybuffer";
+        dc.bufferedAmountLowThreshold = BUFFER_LOW;
+        dcRef.current = dc;
 
         pc.onicecandidate = ({ candidate }) => {
-          if (candidate) {
-            inspectCandidateForLan(candidate, true);
-            socket.emit("busy:ice", candidate);
-          }
+          if (candidate) socket.emit("busy:ice", candidate);
         };
         pc.onconnectionstatechange = () => {
           if (pc.connectionState === "failed") {
@@ -350,31 +255,7 @@ export function useBusyShare() {
           }
         };
 
-        control.onopen = () => {
-          // no-op, readiness handled below
-        };
-        control.onerror = () => {
-          // Non-fatal; pipeline retries and readiness checks handle transient channel issues.
-        };
-
-        for (const ch of channels) {
-          ch.onopen = () => {
-            // no-op, readiness handled below
-          };
-          ch.onerror = () => {
-            // Non-fatal; sender retries across open channels.
-          };
-        }
-
-        waitForUsableSenderChannels(control, channels)
-          .then((ok) => {
-            if (!ok) throw new Error("Data channels failed to open");
-            return pipeline(file, control, channels);
-          })
-          .catch((err) => {
-            setError(err.message || "Channel open failed");
-            setState("error");
-          });
+        dc.onopen = () => pipeline(file, dc);
 
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
@@ -395,160 +276,57 @@ export function useBusyShare() {
   );
 
   // ── Streaming pipeline (sender) ───────────────────────────────────────────
-  async function pipeline(file, control, channels) {
+  async function pipeline(file, dc) {
     if (abortedRef.current) return;
     setState("transferring");
     startSpeedTracker(file.size);
 
-    dynamicChunkSizeRef.current = tuningRef.current.chunkSize;
-    activeLaneCountRef.current = tuningRef.current.numChannels;
-    channelFailCountRef.current = new Map();
-    excludedChannelsRef.current = new Set();
-
-    const totalChunks = Math.ceil(file.size / dynamicChunkSizeRef.current);
-
     // 1. Send metadata
-    if (control.readyState !== "open") {
-      setError("Control channel is not open.");
-      setState("error");
-      return;
-    }
+    dc.send(
+      JSON.stringify({
+        type: "meta",
+        name: file.name,
+        size: file.size,
+        mimeType: file.type || "application/octet-stream",
+      }),
+    );
 
-    try {
-      control.send(
-        JSON.stringify({
-          type: "meta",
-          name: file.name,
-          size: file.size,
-          mimeType: file.type || "application/octet-stream",
-          chunkSize: dynamicChunkSizeRef.current,
-          totalChunks,
-        }),
-      );
-    } catch (e) {
-      setError("Failed to start transfer.");
-      setState("error");
-      return;
-    }
-
-    // 2. Stream chunks using file.slice() — striped across channels
+    // 2. Stream chunks using file.slice() — no full-file RAM load
     let offset = 0;
-    let chunkIndex = 0;
     const total = file.size;
-    let retryStreak = 0;
-    const MAX_RETRY_STREAK = 40;
 
     while (offset < total && !abortedRef.current) {
-      let openChannels = channels
-        .filter((ch) => ch.readyState === "open")
-        .filter((ch) => !excludedChannelsRef.current.has(ch.label));
-
-      if (!openChannels.length) {
-        // If we excluded all channels too aggressively, give them one more chance.
-        excludedChannelsRef.current.clear();
-        channelFailCountRef.current.clear();
-        openChannels = channels.filter((ch) => ch.readyState === "open");
+      // Guard: channel may close if mobile goes to background
+      if (dc.readyState !== "open") {
+        setError("Connection lost. Please try again.");
+        setState("error");
+        return;
       }
 
-      openChannels = openChannels.slice(
-        0,
-        Math.max(1, activeLaneCountRef.current),
-      );
-      if (!openChannels.length) {
-        retryStreak += 1;
-        if (retryStreak >= MAX_RETRY_STREAK) {
-          setError("Connection lost. Please try again.");
-          setState("error");
-          return;
-        }
-        await new Promise((r) => setTimeout(r, 100));
-        continue;
+      // Pause if buffer is saturated → wait for drain event + poll fallback
+      if (dc.bufferedAmount >= BUFFER_HIGH) {
+        await waitForBufferDrain(dc);
       }
+      if (abortedRef.current || dc.readyState !== "open") break;
 
-      const totalBuffered = openChannels.reduce(
-        (s, ch) => s + ch.bufferedAmount,
-        0,
-      );
-      if (totalBuffered >= tuningRef.current.bufferLimit) {
-        await waitForChannelsDrain(openChannels, tuningRef.current.bufferLimit);
-      }
-      if (abortedRef.current) break;
-
-      const chunkSize = dynamicChunkSizeRef.current;
-      const end = Math.min(offset + chunkSize, total);
+      const cs = chunkSizeRef.current;
+      const end = Math.min(offset + cs, total);
       const slice = file.slice(offset, end);
-      const payload = await slice.arrayBuffer();
+      const buf = await slice.arrayBuffer();
 
       if (abortedRef.current) break;
 
-      // packet format: [4 bytes chunkIndex][payload]
-      const packet = new Uint8Array(4 + payload.byteLength);
-      const dv = new DataView(packet.buffer);
-      dv.setUint32(0, chunkIndex);
-      packet.set(new Uint8Array(payload), 4);
-
-      let sentOk = false;
-      const base = chunkIndex % openChannels.length;
-      for (let i = 0; i < openChannels.length; i++) {
-        const ch = openChannels[(base + i) % openChannels.length];
-        if (ch.readyState !== "open") continue;
-        try {
-          ch.send(packet.buffer);
-          sentOk = true;
-          channelFailCountRef.current.set(ch.label, 0);
-          break;
-        } catch {
-          const prev = channelFailCountRef.current.get(ch.label) || 0;
-          const next = prev + 1;
-          channelFailCountRef.current.set(ch.label, next);
-          if (next >= 2) {
-            excludedChannelsRef.current.add(ch.label);
-          }
-        }
-      }
-
-      if (!sentOk) {
-        retryStreak += 1;
-        activeLaneCountRef.current = Math.max(
-          1,
-          activeLaneCountRef.current - 1,
-        );
-        dynamicChunkSizeRef.current = Math.max(
-          MIN_CHUNK_SIZE,
-          Math.floor(dynamicChunkSizeRef.current / 2),
-        );
-        if (retryStreak >= MAX_RETRY_STREAK) {
-          setError("Transfer channel closed. Please retry.");
-          setState("error");
-          return;
-        }
-        await new Promise((r) => setTimeout(r, 120));
-        continue;
-      }
-
-      retryStreak = 0;
+      dc.send(buf);
 
       const sent = end - offset;
       sentRef.current += sent;
       windowRef.current += sent;
       offset = end;
-      chunkIndex++;
     }
 
     // 3. Done signal
     if (!abortedRef.current) {
-      try {
-        if (control.readyState === "open") {
-          control.send(
-            JSON.stringify({
-              type: "done",
-              totalChunks,
-            }),
-          );
-        }
-      } catch {
-        // ignore done-send failure; transfer likely already complete
-      }
+      dc.send(JSON.stringify({ type: "done" }));
       clearInterval(speedTimer.current);
       setProgress(100);
       setSpeed(0);
@@ -573,14 +351,6 @@ export function useBusyShare() {
       setEta(null);
       setError("");
       setReceivedFile(null);
-      setIsLANMode(false);
-      tuningRef.current = { ...DEFAULT_TUNING };
-      dynamicChunkSizeRef.current = DEFAULT_TUNING.chunkSize;
-      activeLaneCountRef.current = DEFAULT_TUNING.numChannels;
-      channelFailCountRef.current = new Map();
-      excludedChannelsRef.current = new Set();
-      localCandidateRef.current = false;
-      remoteCandidateRef.current = false;
 
       const socket = getSocket();
       attachSocketEvents(socket);
@@ -596,10 +366,7 @@ export function useBusyShare() {
         pcRef.current = pc;
 
         pc.onicecandidate = ({ candidate }) => {
-          if (candidate) {
-            inspectCandidateForLan(candidate, true);
-            socket.emit("busy:ice", candidate);
-          }
+          if (candidate) socket.emit("busy:ice", candidate);
         };
         pc.onconnectionstatechange = () => {
           if (pc.connectionState === "failed") {
@@ -610,19 +377,17 @@ export function useBusyShare() {
 
         pc.ondatachannel = ({ channel }) => {
           channel.binaryType = "arraybuffer";
+          dcRef.current = channel;
 
-          if (channel.label === "busy-control") {
-            controlDcRef.current = channel;
-            channel.onmessage = ({ data }) => {
-              if (abortedRef.current || typeof data !== "string") return;
+          channel.onmessage = ({ data }) => {
+            if (abortedRef.current) return;
+
+            if (typeof data === "string") {
               const msg = JSON.parse(data);
 
               if (msg.type === "meta") {
                 rxMeta.current = msg;
                 rxChunks.current = [];
-                rxPendingMapRef.current = new Map();
-                rxNextIndexRef.current = 0;
-                rxTotalChunksRef.current = msg.totalChunks ?? null;
                 sentRef.current = 0;
                 windowRef.current = 0;
                 setFileMeta({
@@ -635,24 +400,13 @@ export function useBusyShare() {
               }
 
               if (msg.type === "done") {
-                rxTotalChunksRef.current =
-                  msg.totalChunks ?? rxTotalChunksRef.current;
-
-                const totalChunks = rxTotalChunksRef.current;
-                if (
-                  totalChunks == null ||
-                  rxChunks.current.length < totalChunks
-                )
-                  return;
-
                 clearInterval(speedTimer.current);
                 const meta = rxMeta.current;
                 const blob = new Blob(rxChunks.current, {
                   type: meta?.mimeType || "application/octet-stream",
                 });
                 const url = URL.createObjectURL(blob);
-                rxChunks.current = [];
-                rxPendingMapRef.current = new Map();
+                rxChunks.current = []; // free memory
                 setReceivedFile({
                   name: meta?.name || "download",
                   size: meta?.size || blob.size,
@@ -663,32 +417,21 @@ export function useBusyShare() {
                 setEta(0);
                 setState("done");
               }
-            };
-            return;
-          }
+              return;
+            }
 
-          dataChannelsRef.current.push(channel);
-          channel.onmessage = ({ data }) => {
-            if (abortedRef.current || !(data instanceof ArrayBuffer)) return;
-            if (data.byteLength < 5) return;
-
-            const view = new DataView(data);
-            const chunkIndex = view.getUint32(0);
-            const payload = data.slice(4);
-            rxPendingMapRef.current.set(chunkIndex, payload);
-
-            while (rxPendingMapRef.current.has(rxNextIndexRef.current)) {
-              const chunk = rxPendingMapRef.current.get(rxNextIndexRef.current);
-              rxPendingMapRef.current.delete(rxNextIndexRef.current);
-              rxChunks.current.push(chunk);
-              sentRef.current += chunk.byteLength;
-              windowRef.current += chunk.byteLength;
-              rxNextIndexRef.current += 1;
+            // Binary chunk — push in order (channel is ordered)
+            if (data instanceof ArrayBuffer) {
+              rxChunks.current.push(data);
+              sentRef.current += data.byteLength;
+              windowRef.current += data.byteLength;
             }
           };
 
-          channel.onerror = () => {
-            // Non-fatal; keep transfer alive unless all channels fail.
+          channel.onerror = (e) => {
+            console.error("[BusyShare] channel error:", e);
+            setError("Data channel error. Try again.");
+            setState("error");
           };
         };
 
@@ -728,12 +471,6 @@ export function useBusyShare() {
     setError("");
     setReceivedFile(null);
     setFileMeta(null);
-    setIsLANMode(false);
-    tuningRef.current = { ...DEFAULT_TUNING };
-    dynamicChunkSizeRef.current = DEFAULT_TUNING.chunkSize;
-    activeLaneCountRef.current = DEFAULT_TUNING.numChannels;
-    channelFailCountRef.current = new Map();
-    excludedChannelsRef.current = new Set();
   }, [cleanup]);
 
   return {
@@ -745,7 +482,6 @@ export function useBusyShare() {
     error,
     fileMeta,
     receivedFile,
-    isLANMode,
     maxBytes,
     isGuest,
     startTransfer,

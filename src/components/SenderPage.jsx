@@ -18,8 +18,8 @@ import {
 } from "@heroicons/react/24/outline";
 
 const API_BASE = import.meta.env.DEV ? "" : import.meta.env.VITE_API_URL || "";
-const FREE_LIMIT = 8 * 1024 ** 3;
-const GUEST_LIMIT = 500 * 1024 ** 2;
+const FREE_LIMIT = 8 * 1024 ** 3; // 8 GB for registered users
+const GUEST_LIMIT = 500 * 1024 ** 2; // 500 MB for guests
 
 function fmtBytes(bytes) {
   if (!bytes) return "0 B";
@@ -41,6 +41,7 @@ export default function SenderPage() {
   const [showUpgrade, setShowUpgrade] = useState(false);
 
   const { usage, refetch: refetchUsage } = useUsage();
+
   const usedBytes = usage?.bytesUsed ?? 0;
   const usedPct = Math.min((usedBytes / FREE_LIMIT) * 100, 100);
   const isAtLimit = !isGuest && usedBytes >= FREE_LIMIT;

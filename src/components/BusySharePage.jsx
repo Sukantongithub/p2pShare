@@ -45,7 +45,6 @@ function SendTab() {
     eta,
     error,
     fileMeta,
-    isLANMode,
     maxBytes,
     isGuest,
     startTransfer,
@@ -175,17 +174,6 @@ function SendTab() {
     return (
       <div className="fade-in">
         <div className="bg-white dark:bg-white/3 border border-slate-300 dark:border-white/8 rounded-2xl p-6 shadow-md">
-          {isLANMode && (
-            <div className="mb-3 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30">
-              <p className="text-emerald-700 dark:text-emerald-400 text-xs font-semibold">
-                ⚡ LAN Turbo Mode
-              </p>
-              <p className="text-emerald-600 dark:text-emerald-300/90 text-[11px]">
-                Direct local network transfer
-              </p>
-            </div>
-          )}
-
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center shrink-0">
               <CloudArrowUpIcon className="w-5 h-5 text-indigo-500" />
@@ -351,7 +339,6 @@ function ReceiveTab() {
     error,
     fileMeta,
     receivedFile,
-    isLANMode,
     joinTransfer,
     cancel,
     reset,
@@ -458,17 +445,6 @@ function ReceiveTab() {
     return (
       <div className="fade-in">
         <div className="bg-white dark:bg-white/3 border border-slate-300 dark:border-white/8 rounded-2xl p-6 shadow-md">
-          {isLANMode && (
-            <div className="mb-3 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30">
-              <p className="text-emerald-700 dark:text-emerald-400 text-xs font-semibold">
-                ⚡ LAN Turbo Mode
-              </p>
-              <p className="text-emerald-600 dark:text-emerald-300/90 text-[11px]">
-                Direct local network transfer
-              </p>
-            </div>
-          )}
-
           {fileMeta && (
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-500/10 flex items-center justify-center shrink-0">
