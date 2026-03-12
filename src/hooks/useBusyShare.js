@@ -22,6 +22,8 @@ const LAN_TUNING = {
   bufferLimit: 16 * 1024 * 1024,
 };
 
+const MIN_CHUNK_SIZE = 32 * 1024;
+
 const SPEED_MS = 500; // speed sample window
 
 const GUEST_MAX = 500 * 1024 * 1024; // 500 MB
@@ -57,6 +59,10 @@ export function useBusyShare() {
   const dataChannelsRef = useRef([]);
   const abortedRef = useRef(false);
   const tuningRef = useRef({ ...DEFAULT_TUNING });
+  const dynamicChunkSizeRef = useRef(DEFAULT_TUNING.chunkSize);
+  const activeLaneCountRef = useRef(DEFAULT_TUNING.numChannels);
+  const channelFailCountRef = useRef(new Map());
+  const excludedChannelsRef = useRef(new Set());
   const localCandidateRef = useRef(false);
   const remoteCandidateRef = useRef(false);
 
@@ -170,6 +176,11 @@ export function useBusyShare() {
     rxPendingMapRef.current = new Map();
     rxNextIndexRef.current = 0;
     rxTotalChunksRef.current = null;
+
+    dynamicChunkSizeRef.current = DEFAULT_TUNING.chunkSize;
+    activeLaneCountRef.current = DEFAULT_TUNING.numChannels;
+    channelFailCountRef.current = new Map();
+    excludedChannelsRef.current = new Set();
 
     localCandidateRef.current = false;
     remoteCandidateRef.current = false;
@@ -286,6 +297,10 @@ export function useBusyShare() {
       setCode("");
       setIsLANMode(false);
       tuningRef.current = { ...DEFAULT_TUNING };
+      dynamicChunkSizeRef.current = DEFAULT_TUNING.chunkSize;
+      activeLaneCountRef.current = DEFAULT_TUNING.numChannels;
+      channelFailCountRef.current = new Map();
+      excludedChannelsRef.current = new Set();
       localCandidateRef.current = false;
       remoteCandidateRef.current = false;
 
@@ -338,16 +353,16 @@ export function useBusyShare() {
         control.onopen = () => {
           // no-op, readiness handled below
         };
-        control.onerror = (e) => {
-          console.error("[BusyShare] control channel error:", e);
+        control.onerror = () => {
+          // Non-fatal; pipeline retries and readiness checks handle transient channel issues.
         };
 
         for (const ch of channels) {
           ch.onopen = () => {
             // no-op, readiness handled below
           };
-          ch.onerror = (e) => {
-            console.error("[BusyShare] data channel error:", e);
+          ch.onerror = () => {
+            // Non-fatal; sender retries across open channels.
           };
         }
 
@@ -385,8 +400,12 @@ export function useBusyShare() {
     setState("transferring");
     startSpeedTracker(file.size);
 
-    const chunkSize = tuningRef.current.chunkSize;
-    const totalChunks = Math.ceil(file.size / chunkSize);
+    dynamicChunkSizeRef.current = tuningRef.current.chunkSize;
+    activeLaneCountRef.current = tuningRef.current.numChannels;
+    channelFailCountRef.current = new Map();
+    excludedChannelsRef.current = new Set();
+
+    const totalChunks = Math.ceil(file.size / dynamicChunkSizeRef.current);
 
     // 1. Send metadata
     if (control.readyState !== "open") {
@@ -402,7 +421,7 @@ export function useBusyShare() {
           name: file.name,
           size: file.size,
           mimeType: file.type || "application/octet-stream",
-          chunkSize,
+          chunkSize: dynamicChunkSizeRef.current,
           totalChunks,
         }),
       );
@@ -416,13 +435,34 @@ export function useBusyShare() {
     let offset = 0;
     let chunkIndex = 0;
     const total = file.size;
+    let retryStreak = 0;
+    const MAX_RETRY_STREAK = 40;
 
     while (offset < total && !abortedRef.current) {
-      const openChannels = channels.filter((ch) => ch.readyState === "open");
+      let openChannels = channels
+        .filter((ch) => ch.readyState === "open")
+        .filter((ch) => !excludedChannelsRef.current.has(ch.label));
+
       if (!openChannels.length) {
-        setError("Connection lost. Please try again.");
-        setState("error");
-        return;
+        // If we excluded all channels too aggressively, give them one more chance.
+        excludedChannelsRef.current.clear();
+        channelFailCountRef.current.clear();
+        openChannels = channels.filter((ch) => ch.readyState === "open");
+      }
+
+      openChannels = openChannels.slice(
+        0,
+        Math.max(1, activeLaneCountRef.current),
+      );
+      if (!openChannels.length) {
+        retryStreak += 1;
+        if (retryStreak >= MAX_RETRY_STREAK) {
+          setError("Connection lost. Please try again.");
+          setState("error");
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 100));
+        continue;
       }
 
       const totalBuffered = openChannels.reduce(
@@ -434,6 +474,7 @@ export function useBusyShare() {
       }
       if (abortedRef.current) break;
 
+      const chunkSize = dynamicChunkSizeRef.current;
       const end = Math.min(offset + chunkSize, total);
       const slice = file.slice(offset, end);
       const payload = await slice.arrayBuffer();
@@ -454,17 +495,38 @@ export function useBusyShare() {
         try {
           ch.send(packet.buffer);
           sentOk = true;
+          channelFailCountRef.current.set(ch.label, 0);
           break;
         } catch {
-          // try next open channel
+          const prev = channelFailCountRef.current.get(ch.label) || 0;
+          const next = prev + 1;
+          channelFailCountRef.current.set(ch.label, next);
+          if (next >= 2) {
+            excludedChannelsRef.current.add(ch.label);
+          }
         }
       }
 
       if (!sentOk) {
-        setError("Transfer channel closed. Please retry.");
-        setState("error");
-        return;
+        retryStreak += 1;
+        activeLaneCountRef.current = Math.max(
+          1,
+          activeLaneCountRef.current - 1,
+        );
+        dynamicChunkSizeRef.current = Math.max(
+          MIN_CHUNK_SIZE,
+          Math.floor(dynamicChunkSizeRef.current / 2),
+        );
+        if (retryStreak >= MAX_RETRY_STREAK) {
+          setError("Transfer channel closed. Please retry.");
+          setState("error");
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 120));
+        continue;
       }
+
+      retryStreak = 0;
 
       const sent = end - offset;
       sentRef.current += sent;
@@ -513,6 +575,10 @@ export function useBusyShare() {
       setReceivedFile(null);
       setIsLANMode(false);
       tuningRef.current = { ...DEFAULT_TUNING };
+      dynamicChunkSizeRef.current = DEFAULT_TUNING.chunkSize;
+      activeLaneCountRef.current = DEFAULT_TUNING.numChannels;
+      channelFailCountRef.current = new Map();
+      excludedChannelsRef.current = new Set();
       localCandidateRef.current = false;
       remoteCandidateRef.current = false;
 
@@ -621,8 +687,8 @@ export function useBusyShare() {
             }
           };
 
-          channel.onerror = (e) => {
-            console.error("[BusyShare] channel error:", e);
+          channel.onerror = () => {
+            // Non-fatal; keep transfer alive unless all channels fail.
           };
         };
 
@@ -664,6 +730,10 @@ export function useBusyShare() {
     setFileMeta(null);
     setIsLANMode(false);
     tuningRef.current = { ...DEFAULT_TUNING };
+    dynamicChunkSizeRef.current = DEFAULT_TUNING.chunkSize;
+    activeLaneCountRef.current = DEFAULT_TUNING.numChannels;
+    channelFailCountRef.current = new Map();
+    excludedChannelsRef.current = new Set();
   }, [cleanup]);
 
   return {
