@@ -75,7 +75,10 @@ function SendTab({ user }) {
           data: { session },
         } = await supabase.auth.getSession();
         if (session) {
-          xhr.setRequestHeader("Authorization", `Bearer ${session.access_token}`);
+          xhr.setRequestHeader(
+            "Authorization",
+            `Bearer ${session.access_token}`,
+          );
         }
       }
 

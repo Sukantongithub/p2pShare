@@ -140,11 +140,15 @@ export function useBusyShare() {
     speedTimer.current = null;
 
     if (controlDcRef.current) {
-      try { controlDcRef.current.close(); } catch {}
+      try {
+        controlDcRef.current.close();
+      } catch {}
       controlDcRef.current = null;
     }
     for (const ch of dataChannelsRef.current) {
-      try { ch.close(); } catch {}
+      try {
+        ch.close();
+      } catch {}
     }
     dataChannelsRef.current = [];
 
@@ -199,7 +203,8 @@ export function useBusyShare() {
 
       const getTotalBuffered = () =>
         channels.reduce(
-          (sum, ch) => sum + (ch?.readyState === "open" ? ch.bufferedAmount : 0),
+          (sum, ch) =>
+            sum + (ch?.readyState === "open" ? ch.bufferedAmount : 0),
           0,
         );
 
@@ -215,6 +220,23 @@ export function useBusyShare() {
         }
       }, 25);
     });
+  }
+
+  async function waitForUsableSenderChannels(
+    control,
+    channels,
+    timeoutMs = 15000,
+  ) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs && !abortedRef.current) {
+      const controlOpen = control?.readyState === "open";
+      const openDataCount = channels.filter(
+        (ch) => ch.readyState === "open",
+      ).length;
+      if (controlOpen && openDataCount > 0) return true;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return false;
   }
 
   // ── Attach common error/cancel socket listeners ───────────────────────────
@@ -313,18 +335,27 @@ export function useBusyShare() {
           }
         };
 
-        const allChannels = [control, ...channels];
-        const waitOpen = allChannels.map(
-          (ch) =>
-            new Promise((resolve, reject) => {
-              if (ch.readyState === "open") return resolve();
-              ch.onopen = () => resolve();
-              ch.onerror = () => reject(new Error("Data channel open failed"));
-            }),
-        );
+        control.onopen = () => {
+          // no-op, readiness handled below
+        };
+        control.onerror = (e) => {
+          console.error("[BusyShare] control channel error:", e);
+        };
 
-        Promise.all(waitOpen)
-          .then(() => pipeline(file, control, channels))
+        for (const ch of channels) {
+          ch.onopen = () => {
+            // no-op, readiness handled below
+          };
+          ch.onerror = (e) => {
+            console.error("[BusyShare] data channel error:", e);
+          };
+        }
+
+        waitForUsableSenderChannels(control, channels)
+          .then((ok) => {
+            if (!ok) throw new Error("Data channels failed to open");
+            return pipeline(file, control, channels);
+          })
           .catch((err) => {
             setError(err.message || "Channel open failed");
             setState("error");
@@ -358,22 +389,33 @@ export function useBusyShare() {
     const totalChunks = Math.ceil(file.size / chunkSize);
 
     // 1. Send metadata
-    control.send(
-      JSON.stringify({
-        type: "meta",
-        name: file.name,
-        size: file.size,
-        mimeType: file.type || "application/octet-stream",
-        chunkSize,
-        totalChunks,
-      }),
-    );
+    if (control.readyState !== "open") {
+      setError("Control channel is not open.");
+      setState("error");
+      return;
+    }
+
+    try {
+      control.send(
+        JSON.stringify({
+          type: "meta",
+          name: file.name,
+          size: file.size,
+          mimeType: file.type || "application/octet-stream",
+          chunkSize,
+          totalChunks,
+        }),
+      );
+    } catch (e) {
+      setError("Failed to start transfer.");
+      setState("error");
+      return;
+    }
 
     // 2. Stream chunks using file.slice() — striped across channels
     let offset = 0;
     let chunkIndex = 0;
     const total = file.size;
-    const encoder = new TextEncoder();
 
     while (offset < total && !abortedRef.current) {
       const openChannels = channels.filter((ch) => ch.readyState === "open");
@@ -383,7 +425,10 @@ export function useBusyShare() {
         return;
       }
 
-      const totalBuffered = openChannels.reduce((s, ch) => s + ch.bufferedAmount, 0);
+      const totalBuffered = openChannels.reduce(
+        (s, ch) => s + ch.bufferedAmount,
+        0,
+      );
       if (totalBuffered >= tuningRef.current.bufferLimit) {
         await waitForChannelsDrain(openChannels, tuningRef.current.bufferLimit);
       }
@@ -401,8 +446,25 @@ export function useBusyShare() {
       dv.setUint32(0, chunkIndex);
       packet.set(new Uint8Array(payload), 4);
 
-      const channel = openChannels[chunkIndex % openChannels.length];
-      channel.send(packet.buffer);
+      let sentOk = false;
+      const base = chunkIndex % openChannels.length;
+      for (let i = 0; i < openChannels.length; i++) {
+        const ch = openChannels[(base + i) % openChannels.length];
+        if (ch.readyState !== "open") continue;
+        try {
+          ch.send(packet.buffer);
+          sentOk = true;
+          break;
+        } catch {
+          // try next open channel
+        }
+      }
+
+      if (!sentOk) {
+        setError("Transfer channel closed. Please retry.");
+        setState("error");
+        return;
+      }
 
       const sent = end - offset;
       sentRef.current += sent;
@@ -413,12 +475,18 @@ export function useBusyShare() {
 
     // 3. Done signal
     if (!abortedRef.current) {
-      control.send(
-        JSON.stringify({
-          type: "done",
-          totalChunks,
-        }),
-      );
+      try {
+        if (control.readyState === "open") {
+          control.send(
+            JSON.stringify({
+              type: "done",
+              totalChunks,
+            }),
+          );
+        }
+      } catch {
+        // ignore done-send failure; transfer likely already complete
+      }
       clearInterval(speedTimer.current);
       setProgress(100);
       setSpeed(0);
@@ -501,10 +569,15 @@ export function useBusyShare() {
               }
 
               if (msg.type === "done") {
-                rxTotalChunksRef.current = msg.totalChunks ?? rxTotalChunksRef.current;
+                rxTotalChunksRef.current =
+                  msg.totalChunks ?? rxTotalChunksRef.current;
 
                 const totalChunks = rxTotalChunksRef.current;
-                if (totalChunks == null || rxChunks.current.length < totalChunks) return;
+                if (
+                  totalChunks == null ||
+                  rxChunks.current.length < totalChunks
+                )
+                  return;
 
                 clearInterval(speedTimer.current);
                 const meta = rxMeta.current;
@@ -550,8 +623,6 @@ export function useBusyShare() {
 
           channel.onerror = (e) => {
             console.error("[BusyShare] channel error:", e);
-            setError("Data channel error. Try again.");
-            setState("error");
           };
         };
 

@@ -37,7 +37,21 @@ function fmtEta(sec) {
 //  SEND TAB
 // ─────────────────────────────────────────────
 function SendTab() {
-  const { state, code, progress, speed, eta, error, fileMeta, isLANMode, maxBytes, isGuest, startTransfer, cancel, reset } = useBusyShare();
+  const {
+    state,
+    code,
+    progress,
+    speed,
+    eta,
+    error,
+    fileMeta,
+    isLANMode,
+    maxBytes,
+    isGuest,
+    startTransfer,
+    cancel,
+    reset,
+  } = useBusyShare();
   const [dragging, setDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [sizeErr, setSizeErr] = useState("");
@@ -54,7 +68,8 @@ function SendTab() {
   };
 
   const handleDrop = (e) => {
-    e.preventDefault(); setDragging(false);
+    e.preventDefault();
+    setDragging(false);
     handleFile(e.dataTransfer.files[0]);
   };
 
@@ -64,18 +79,27 @@ function SendTab() {
     setSelectedFile(null);
   };
 
-  const doReset = () => { reset(); setSizeErr(""); setSelectedFile(null); };
+  const doReset = () => {
+    reset();
+    setSizeErr("");
+    setSelectedFile(null);
+  };
 
   // done
   if (state === "done") {
     return (
       <div className="fade-in text-center py-6">
         <CheckCircleIcon className="w-14 h-14 text-emerald-500 mx-auto mb-3" />
-        <p className="text-emerald-600 dark:text-emerald-400 font-bold text-lg mb-1">Transfer Complete!</p>
+        <p className="text-emerald-600 dark:text-emerald-400 font-bold text-lg mb-1">
+          Transfer Complete!
+        </p>
         <p className="text-slate-500 dark:text-slate-400 text-sm mb-5">
           {fileMeta?.name} · {fmtBytes(fileMeta?.size)} sent
         </p>
-        <button onClick={doReset} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-all text-sm">
+        <button
+          onClick={doReset}
+          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-all text-sm"
+        >
           Send Another File
         </button>
       </div>
@@ -90,8 +114,15 @@ function SendTab() {
         <p className="text-rose-600 dark:text-rose-400 font-semibold mb-1">
           {state === "cancelled" ? "Transfer Cancelled" : "Transfer Failed"}
         </p>
-        {error && <p className="text-slate-500 dark:text-slate-400 text-sm mb-4">{error}</p>}
-        <button onClick={doReset} className="px-5 py-2.5 bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 text-slate-800 dark:text-white font-semibold rounded-xl transition-all text-sm">
+        {error && (
+          <p className="text-slate-500 dark:text-slate-400 text-sm mb-4">
+            {error}
+          </p>
+        )}
+        <button
+          onClick={doReset}
+          className="px-5 py-2.5 bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 text-slate-800 dark:text-white font-semibold rounded-xl transition-all text-sm"
+        >
           Try Again
         </button>
       </div>
@@ -103,10 +134,16 @@ function SendTab() {
     return (
       <div className="fade-in">
         <div className="bg-white dark:bg-white/3 border border-slate-300 dark:border-white/8 rounded-2xl p-6 shadow-md text-center">
-          <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">Share this code with the receiver</p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">
+            Share this code with the receiver
+          </p>
           <div className="flex items-center justify-center gap-2 my-4 flex-wrap">
             {code.split("").map((d, i) => (
-              <div key={i} className="w-12 h-14 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/40 flex items-center justify-center text-2xl font-bold text-indigo-600 dark:text-indigo-300 float-anim" style={{ animationDelay: `${i * 0.08}s` }}>
+              <div
+                key={i}
+                className="w-12 h-14 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/40 flex items-center justify-center text-2xl font-bold text-indigo-600 dark:text-indigo-300 float-anim"
+                style={{ animationDelay: `${i * 0.08}s` }}
+              >
                 {d}
               </div>
             ))}
@@ -121,7 +158,10 @@ function SendTab() {
             {fileMeta?.name} · {fmtBytes(fileMeta?.size)}
           </p>
 
-          <button onClick={cancel} className="px-4 py-2 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-sm font-medium transition-all">
+          <button
+            onClick={cancel}
+            className="px-4 py-2 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-sm font-medium transition-all"
+          >
             <XCircleIcon className="w-4 h-4 inline mr-1 -mt-0.5" /> Cancel
           </button>
         </div>
@@ -137,8 +177,12 @@ function SendTab() {
         <div className="bg-white dark:bg-white/3 border border-slate-300 dark:border-white/8 rounded-2xl p-6 shadow-md">
           {isLANMode && (
             <div className="mb-3 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30">
-              <p className="text-emerald-700 dark:text-emerald-400 text-xs font-semibold">⚡ LAN Turbo Mode</p>
-              <p className="text-emerald-600 dark:text-emerald-300/90 text-[11px]">Direct local network transfer</p>
+              <p className="text-emerald-700 dark:text-emerald-400 text-xs font-semibold">
+                ⚡ LAN Turbo Mode
+              </p>
+              <p className="text-emerald-600 dark:text-emerald-300/90 text-[11px]">
+                Direct local network transfer
+              </p>
             </div>
           )}
 
@@ -147,16 +191,35 @@ function SendTab() {
               <CloudArrowUpIcon className="w-5 h-5 text-indigo-500" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-slate-900 dark:text-white font-semibold truncate">{fileMeta?.name}</p>
-              <p className="text-slate-500 dark:text-slate-400 text-xs">{fmtBytes(fileMeta?.size)}</p>
+              <p className="text-slate-900 dark:text-white font-semibold truncate">
+                {fileMeta?.name}
+              </p>
+              <p className="text-slate-500 dark:text-slate-400 text-xs">
+                {fmtBytes(fileMeta?.size)}
+              </p>
             </div>
           </div>
 
           {state === "connecting" ? (
             <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-sm">
-              <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+              <svg
+                className="animate-spin w-4 h-4"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v8z"
+                />
               </svg>
               Establishing WebRTC connection…
             </div>
@@ -177,7 +240,10 @@ function SendTab() {
             </>
           )}
 
-          <button onClick={cancel} className="mt-2 w-full py-2.5 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-sm font-medium transition-all flex items-center justify-center gap-1.5">
+          <button
+            onClick={cancel}
+            className="mt-2 w-full py-2.5 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-sm font-medium transition-all flex items-center justify-center gap-1.5"
+          >
             <XCircleIcon className="w-4 h-4" /> Cancel Transfer
           </button>
         </div>
@@ -193,18 +259,29 @@ function SendTab() {
         <div className="mb-5 p-4 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-amber-800 dark:text-amber-300 text-sm font-semibold">🚀 Guest Mode</p>
-              <p className="text-amber-700 dark:text-amber-400/80 text-xs mt-0.5">500 MB limit per transfer</p>
+              <p className="text-amber-800 dark:text-amber-300 text-sm font-semibold">
+                🚀 Guest Mode
+              </p>
+              <p className="text-amber-700 dark:text-amber-400/80 text-xs mt-0.5">
+                500 MB limit per transfer
+              </p>
             </div>
-            <Link to="/login" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold transition-all shrink-0">
-              <UserCircleIcon className="w-3.5 h-3.5" /> Sign in for 5 GB <ArrowRightIcon className="w-3 h-3" />
+            <Link
+              to="/login"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold transition-all shrink-0"
+            >
+              <UserCircleIcon className="w-3.5 h-3.5" /> Sign in for 5 GB{" "}
+              <ArrowRightIcon className="w-3 h-3" />
             </Link>
           </div>
         </div>
       )}
 
       <div
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
         onClick={() => fileInput.current?.click()}
@@ -214,18 +291,29 @@ function SendTab() {
             : "border-slate-300 dark:border-white/15 bg-slate-50 dark:bg-white/3 hover:border-indigo-400 dark:hover:border-indigo-500/50 hover:bg-indigo-50/50 dark:hover:bg-indigo-500/5"
         }`}
       >
-        <input ref={fileInput} type="file" className="hidden" onChange={(e) => handleFile(e.target.files[0])} />
+        <input
+          ref={fileInput}
+          type="file"
+          className="hidden"
+          onChange={(e) => handleFile(e.target.files[0])}
+        />
 
         {selectedFile ? (
           <>
             <CloudArrowUpIcon className="w-10 h-10 text-indigo-500 mx-auto mb-2" />
-            <p className="font-semibold text-slate-900 dark:text-white truncate">{selectedFile.name}</p>
-            <p className="text-slate-500 dark:text-slate-400 text-sm">{fmtBytes(selectedFile.size)}</p>
+            <p className="font-semibold text-slate-900 dark:text-white truncate">
+              {selectedFile.name}
+            </p>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">
+              {fmtBytes(selectedFile.size)}
+            </p>
           </>
         ) : (
           <>
             <BoltIcon className="w-10 h-10 text-indigo-400 mx-auto mb-2" />
-            <p className="font-semibold text-slate-800 dark:text-white mb-1">Drop file for instant P2P transfer</p>
+            <p className="font-semibold text-slate-800 dark:text-white mb-1">
+              Drop file for instant P2P transfer
+            </p>
             <p className="text-slate-500 dark:text-slate-400 text-sm">
               or click to browse · max {isGuest ? "500 MB" : "5 GB"}
             </p>
@@ -255,24 +343,42 @@ function SendTab() {
 //  RECEIVE TAB
 // ─────────────────────────────────────────────
 function ReceiveTab() {
-  const { state, progress, speed, eta, error, fileMeta, receivedFile, isLANMode, joinTransfer, cancel, reset } = useBusyShare();
+  const {
+    state,
+    progress,
+    speed,
+    eta,
+    error,
+    fileMeta,
+    receivedFile,
+    isLANMode,
+    joinTransfer,
+    cancel,
+    reset,
+  } = useBusyShare();
   const [passcode, setPasscode] = useState(Array(6).fill(""));
   const inputRefs = useRef([]);
 
   const handleDigit = (i, v) => {
     if (!/^\d*$/.test(v)) return;
-    const u = [...passcode]; u[i] = v.slice(-1); setPasscode(u);
+    const u = [...passcode];
+    u[i] = v.slice(-1);
+    setPasscode(u);
     if (v && i < 5) inputRefs.current[i + 1]?.focus();
   };
 
   const handleKey = (i, e) => {
-    if (e.key === "Backspace" && !passcode[i] && i > 0) inputRefs.current[i - 1]?.focus();
+    if (e.key === "Backspace" && !passcode[i] && i > 0)
+      inputRefs.current[i - 1]?.focus();
     if (e.key === "Enter") doJoin();
   };
 
   const handlePaste = (e) => {
     const d = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-    if (d.length === 6) { setPasscode(d.split("")); inputRefs.current[5]?.focus(); }
+    if (d.length === 6) {
+      setPasscode(d.split(""));
+      inputRefs.current[5]?.focus();
+    }
     e.preventDefault();
   };
 
@@ -282,13 +388,19 @@ function ReceiveTab() {
     joinTransfer(code);
   };
 
-  const doReset = () => { reset(); setPasscode(Array(6).fill("")); };
+  const doReset = () => {
+    reset();
+    setPasscode(Array(6).fill(""));
+  };
 
   const triggerDownload = () => {
     if (!receivedFile) return;
     const a = document.createElement("a");
-    a.href = receivedFile.url; a.download = receivedFile.name;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    a.href = receivedFile.url;
+    a.download = receivedFile.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   // done
@@ -296,7 +408,9 @@ function ReceiveTab() {
     return (
       <div className="fade-in text-center py-4">
         <CheckCircleIcon className="w-14 h-14 text-emerald-500 mx-auto mb-3" />
-        <p className="text-emerald-600 dark:text-emerald-400 font-bold text-lg mb-1">Transfer Complete!</p>
+        <p className="text-emerald-600 dark:text-emerald-400 font-bold text-lg mb-1">
+          Transfer Complete!
+        </p>
         <p className="text-slate-500 dark:text-slate-400 text-sm mb-5">
           {receivedFile.name} · {fmtBytes(receivedFile.size)}
         </p>
@@ -306,7 +420,10 @@ function ReceiveTab() {
         >
           <ArrowDownTrayIcon className="w-5 h-5" /> Download File
         </button>
-        <button onClick={doReset} className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-sm transition-colors">
+        <button
+          onClick={doReset}
+          className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-sm transition-colors"
+        >
           Receive Another
         </button>
       </div>
@@ -321,8 +438,15 @@ function ReceiveTab() {
         <p className="text-rose-600 dark:text-rose-400 font-semibold mb-1">
           {state === "cancelled" ? "Transfer Cancelled" : "Transfer Failed"}
         </p>
-        {error && <p className="text-slate-500 dark:text-slate-400 text-sm mb-4">{error}</p>}
-        <button onClick={doReset} className="px-5 py-2.5 bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 text-slate-800 dark:text-white font-semibold rounded-xl text-sm transition-all">
+        {error && (
+          <p className="text-slate-500 dark:text-slate-400 text-sm mb-4">
+            {error}
+          </p>
+        )}
+        <button
+          onClick={doReset}
+          className="px-5 py-2.5 bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 text-slate-800 dark:text-white font-semibold rounded-xl text-sm transition-all"
+        >
           Try Again
         </button>
       </div>
@@ -336,8 +460,12 @@ function ReceiveTab() {
         <div className="bg-white dark:bg-white/3 border border-slate-300 dark:border-white/8 rounded-2xl p-6 shadow-md">
           {isLANMode && (
             <div className="mb-3 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30">
-              <p className="text-emerald-700 dark:text-emerald-400 text-xs font-semibold">⚡ LAN Turbo Mode</p>
-              <p className="text-emerald-600 dark:text-emerald-300/90 text-[11px]">Direct local network transfer</p>
+              <p className="text-emerald-700 dark:text-emerald-400 text-xs font-semibold">
+                ⚡ LAN Turbo Mode
+              </p>
+              <p className="text-emerald-600 dark:text-emerald-300/90 text-[11px]">
+                Direct local network transfer
+              </p>
             </div>
           )}
 
@@ -347,17 +475,36 @@ function ReceiveTab() {
                 <CloudArrowDownIcon className="w-5 h-5 text-purple-500" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-slate-900 dark:text-white font-semibold truncate">{fileMeta.name}</p>
-                <p className="text-slate-500 dark:text-slate-400 text-xs">{fmtBytes(fileMeta.size)}</p>
+                <p className="text-slate-900 dark:text-white font-semibold truncate">
+                  {fileMeta.name}
+                </p>
+                <p className="text-slate-500 dark:text-slate-400 text-xs">
+                  {fmtBytes(fileMeta.size)}
+                </p>
               </div>
             </div>
           )}
 
           {state === "connecting" ? (
             <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-sm mb-4">
-              <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+              <svg
+                className="animate-spin w-4 h-4"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v8z"
+                />
               </svg>
               Establishing WebRTC connection…
             </div>
@@ -377,7 +524,10 @@ function ReceiveTab() {
             </>
           )}
 
-          <button onClick={cancel} className="w-full py-2.5 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-sm font-medium transition-all flex items-center justify-center gap-1.5">
+          <button
+            onClick={cancel}
+            className="w-full py-2.5 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-sm font-medium transition-all flex items-center justify-center gap-1.5"
+          >
             <XCircleIcon className="w-4 h-4" /> Cancel
           </button>
         </div>
@@ -393,18 +543,25 @@ function ReceiveTab() {
           Enter the 6-digit transfer code
         </p>
 
-        <div className="flex gap-2 sm:gap-3 justify-center mb-5" onPaste={handlePaste}>
+        <div
+          className="flex gap-2 sm:gap-3 justify-center mb-5"
+          onPaste={handlePaste}
+        >
           {passcode.map((d, i) => (
             <input
               key={i}
               ref={(el) => (inputRefs.current[i] = el)}
-              type="text" inputMode="numeric" maxLength={1} value={d}
+              type="text"
+              inputMode="numeric"
+              maxLength={1}
+              value={d}
               onChange={(e) => handleDigit(i, e.target.value)}
               onKeyDown={(e) => handleKey(i, e)}
               className={`w-10 h-12 sm:w-14 sm:h-16 text-center text-lg sm:text-2xl font-bold rounded-xl border transition-all duration-200 text-slate-900 dark:text-white outline-none
-                ${d
-                  ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 dark:border-indigo-500/60 text-indigo-600 dark:text-indigo-300"
-                  : "border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 focus:border-indigo-400 dark:focus:border-indigo-500/50"
+                ${
+                  d
+                    ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 dark:border-indigo-500/60 text-indigo-600 dark:text-indigo-300"
+                    : "border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 focus:border-indigo-400 dark:focus:border-indigo-500/50"
                 }`}
             />
           ))}
@@ -437,7 +594,6 @@ export default function BusySharePage() {
   return (
     <div className="min-h-screen light-mesh bg-linear-to-b from-slate-50 to-violet-50/40 dark:bg-slate-950 transition-colors duration-300">
       <div className="max-w-2xl mx-auto px-4 py-10 sm:py-12 pb-24 sm:pb-12">
-
         {/* Heading */}
         <div className="text-center mb-8 fade-in">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-violet-100 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20 rounded-full text-violet-600 dark:text-violet-400 text-sm font-medium mb-4">
@@ -452,15 +608,18 @@ export default function BusySharePage() {
           </h1>
           <p className="text-slate-700 dark:text-slate-400 text-sm sm:text-base max-w-md mx-auto">
             Browser-to-browser transfer. Files go{" "}
-            <span className="font-medium text-violet-500">directly between devices</span> — never stored on our servers.
+            <span className="font-medium text-violet-500">
+              directly between devices
+            </span>{" "}
+            — never stored on our servers.
           </p>
         </div>
 
         {/* Tab switcher */}
         <div className="flex gap-1 p-1 bg-white dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl mb-6 shadow-sm fade-in">
           {[
-            { id: "send",    label: "Send File",    icon: CloudArrowUpIcon },
-            { id: "receive", label: "Receive File",  icon: CloudArrowDownIcon },
+            { id: "send", label: "Send File", icon: CloudArrowUpIcon },
+            { id: "receive", label: "Receive File", icon: CloudArrowDownIcon },
           ].map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -477,7 +636,7 @@ export default function BusySharePage() {
           ))}
         </div>
 
-        {activeTab === "send"    && <SendTab />}
+        {activeTab === "send" && <SendTab />}
         {activeTab === "receive" && <ReceiveTab />}
       </div>
     </div>

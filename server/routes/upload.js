@@ -111,7 +111,8 @@ router.post("/init", optionalAuth, async (req, res) => {
     if (isGuest && size > GUEST_MAX_BYTES) {
       return res.status(413).json({
         error: "guest_limit_exceeded",
-        message: "Guest uploads are limited to 500 MB. Sign in to upload up to 8 GB.",
+        message:
+          "Guest uploads are limited to 500 MB. Sign in to upload up to 8 GB.",
         maxBytes: GUEST_MAX_BYTES,
       });
     }
@@ -121,7 +122,8 @@ router.post("/init", optionalAuth, async (req, res) => {
       if (!allowed) {
         return res.status(402).json({
           error: "limit_exceeded",
-          message: "Monthly storage limit reached. Upgrade to continue uploading.",
+          message:
+            "Monthly storage limit reached. Upgrade to continue uploading.",
           bytesUsed: used,
           freeLimit: 8 * 1024 * 1024 * 1024,
         });
@@ -162,7 +164,9 @@ router.post("/init", optionalAuth, async (req, res) => {
     return res.status(200).json({ uploadUrl, uploadToken });
   } catch (err) {
     console.error("Upload init error:", err);
-    return res.status(500).json({ error: "Failed to initialize upload", detail: err.message });
+    return res
+      .status(500)
+      .json({ error: "Failed to initialize upload", detail: err.message });
   }
 });
 
@@ -171,10 +175,12 @@ router.post("/init", optionalAuth, async (req, res) => {
 router.post("/complete", optionalAuth, async (req, res) => {
   try {
     const uploadToken = String(req.body?.uploadToken || "");
-    if (!uploadToken) return res.status(400).json({ error: "Missing uploadToken" });
+    if (!uploadToken)
+      return res.status(400).json({ error: "Missing uploadToken" });
 
     const pending = pendingDirectUploads.get(uploadToken);
-    if (!pending) return res.status(404).json({ error: "Invalid or expired upload token" });
+    if (!pending)
+      return res.status(404).json({ error: "Invalid or expired upload token" });
 
     pendingDirectUploads.delete(uploadToken); // single-use
 
@@ -197,7 +203,9 @@ router.post("/complete", optionalAuth, async (req, res) => {
       r2_key: pending.key,
       passcode: pending.passcode,
       size: pending.size,
-      expires_at: new Date(Date.now() + pending.filePolicy.expiryMs).toISOString(),
+      expires_at: new Date(
+        Date.now() + pending.filePolicy.expiryMs,
+      ).toISOString(),
       max_downloads: pending.filePolicy.maxDownloads,
       download_count: 0,
     });
@@ -226,7 +234,9 @@ router.post("/complete", optionalAuth, async (req, res) => {
     });
   } catch (err) {
     console.error("Upload complete error:", err);
-    return res.status(500).json({ error: "Failed to finalize upload", detail: err.message });
+    return res
+      .status(500)
+      .json({ error: "Failed to finalize upload", detail: err.message });
   }
 });
 
