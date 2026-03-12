@@ -631,47 +631,6 @@ function ReceiveTab() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  INFO CARD — shown at page level explaining LAN Turbo Mode
-// ─────────────────────────────────────────────────────────────────────────────
-function LANInfoCard() {
-  return (
-    <div className="bg-white dark:bg-white/3 border border-slate-200 dark:border-white/8 rounded-2xl p-5 shadow-sm mb-6 fade-in">
-      <p className="text-slate-700 dark:text-slate-300 text-sm font-semibold mb-3">
-        How LAN Turbo works
-      </p>
-      <ul className="space-y-2.5">
-        {[
-          {
-            icon: "📡",
-            text: "Detects if both devices are on the same WiFi (192.168.x.x / 10.x.x.x / 172.16–31.x.x)",
-          },
-          {
-            icon: "⚡",
-            text: "Activates 6 parallel data channels + 512 KB chunks for maximum local bandwidth",
-          },
-          {
-            icon: "🔒",
-            text: "Files travel directly between devices — never pass through our servers",
-          },
-          {
-            icon: "🌐",
-            text: "Falls back to 4-channel standard P2P if LAN is not detected",
-          },
-        ].map(({ icon, text }) => (
-          <li
-            key={text}
-            className="flex items-start gap-2.5 text-sm text-slate-600 dark:text-slate-400"
-          >
-            <span className="text-base shrink-0 mt-0.5">{icon}</span>
-            <span>{text}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 //  MAIN PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 export default function LANSharePage() {
@@ -699,19 +658,6 @@ export default function LANSharePage() {
             </span>{" "}
             and switches to 6-channel mode for blazing speed.
           </p>
-
-          {/* Speed indicator */}
-          <div className="inline-flex items-center gap-3 mt-4 px-4 py-2 rounded-xl bg-white dark:bg-white/4 border border-slate-200 dark:border-white/8 shadow-sm">
-            <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-xs">
-              <WifiIcon className="w-3.5 h-3.5" />
-              WAN: 4 channels
-            </div>
-            <div className="w-px h-4 bg-slate-300 dark:bg-white/15" />
-            <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
-              <BoltIcon className="w-3.5 h-3.5" />
-              LAN: 6 channels · ~300 Mbps
-            </div>
-          </div>
         </div>
 
         {/* ── Tab switcher ──────────────────────────────────────── */}
@@ -737,11 +683,6 @@ export default function LANSharePage() {
 
         {activeTab === "send" && <SendTab />}
         {activeTab === "receive" && <ReceiveTab />}
-
-        {/* ── Info card ──────────────────────────────────────────── */}
-        <div className="mt-8">
-          <LANInfoCard />
-        </div>
 
         {/* ── Link back to BusyShare ─────────────────────────────── */}
         <p className="text-center text-sm text-slate-400 dark:text-slate-500 mt-2">
