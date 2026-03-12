@@ -6,6 +6,7 @@ import Navbar from "./components/Navbar";
 import FilePage from "./components/FilePage";
 import ClipboardPage from "./components/ClipboardPage";
 import BusySharePage from "./components/BusySharePage";
+import LANSharePage from "./components/LANSharePage";
 import ProfilePage from "./components/ProfilePage";
 import Notification from "./components/Notification";
 
@@ -42,6 +43,15 @@ export default function App() {
               <div className="min-h-screen bg-slate-100 dark:bg-slate-950 transition-colors duration-300">
                 <Navbar />
                 <BusySharePage />
+              </div>
+            }
+          />
+          <Route
+            path="/lan-share"
+            element={
+              <div className="min-h-screen bg-slate-100 dark:bg-slate-950 transition-colors duration-300">
+                <Navbar />
+                <LANSharePage />
               </div>
             }
           />

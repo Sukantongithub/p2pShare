@@ -11,6 +11,7 @@ import {
   UserCircleIcon,
   ArrowRightIcon,
   BoltIcon,
+  WifiIcon,
 } from "@heroicons/react/24/outline";
 
 export default function Navbar() {
@@ -29,6 +30,7 @@ export default function Navbar() {
   const allTabs = [
     { to: "/", label: "Files", icon: CloudArrowUpIcon },
     { to: "/busy-share", label: "BusyShare", icon: BoltIcon },
+    { to: "/lan-share", label: "LAN Turbo", icon: WifiIcon },
     { to: "/clipboard", label: "Clipboard", icon: ClipboardDocumentIcon },
     { to: "/profile", label: "Profile", icon: UserCircleIcon, authOnly: true },
   ];
