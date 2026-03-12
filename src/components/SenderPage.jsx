@@ -18,8 +18,8 @@ import {
 } from "@heroicons/react/24/outline";
 
 const API_BASE = import.meta.env.DEV ? "" : import.meta.env.VITE_API_URL || "";
-const FREE_LIMIT = 8 * 1024 ** 3;      // 8 GB for registered users
-const GUEST_LIMIT = 500 * 1024 ** 2;   // 500 MB for guests
+const FREE_LIMIT = 8 * 1024 ** 3; // 8 GB for registered users
+const GUEST_LIMIT = 500 * 1024 ** 2; // 500 MB for guests
 
 function fmtBytes(bytes) {
   if (!bytes) return "0 B";
@@ -71,7 +71,10 @@ export default function SenderPage() {
           data: { session },
         } = await supabase.auth.getSession();
         if (session) {
-          xhr.setRequestHeader("Authorization", `Bearer ${session.access_token}`);
+          xhr.setRequestHeader(
+            "Authorization",
+            `Bearer ${session.access_token}`,
+          );
         }
       }
 
@@ -81,8 +84,13 @@ export default function SenderPage() {
 
       xhr.onload = () => {
         setUploading(false);
+        let data = {};
+        try {
+          data = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+        } catch {
+          data = {};
+        }
         if (xhr.status === 200) {
-          const data = JSON.parse(xhr.responseText);
           setResult(data);
           setFile(null);
           showNotification("File uploaded!", "success");
@@ -90,7 +98,6 @@ export default function SenderPage() {
         } else if (xhr.status === 402) {
           setShowUpgrade(true);
         } else {
-          const data = JSON.parse(xhr.responseText);
           const msg = data.message || data.error || "Upload failed";
           setError(msg);
           showNotification(msg, "error");

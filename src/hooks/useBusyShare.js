@@ -14,68 +14,74 @@
  *   3. done JSON   → { type:'done' }
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { io as socketIO } from 'socket.io-client';
-import { useAuth } from './useAuth';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { io as socketIO } from "socket.io-client";
+import { useAuth } from "./useAuth";
 
 // ── Tuning constants ──────────────────────────────────────────────────────────
-const CHUNK_MIN      = 16  * 1024;        // 16 KB  — very slow / mobile
-const CHUNK_DEFAULT  = 64  * 1024;        // 64 KB  — default (mobile-safe)
-const CHUNK_MAX      = 256 * 1024;        // 256 KB — fast LAN / desktop
-const BUFFER_HIGH    = 4   * 1024 * 1024; // 4 MB  — pause  (mobile-safe)
-const BUFFER_LOW     = 512 * 1024;        // 512 KB — resume (mobile-safe threshold)
-const SPEED_MS       = 500;               // speed sample window
+const CHUNK_MIN = 32 * 1024; // 32 KB
+const CHUNK_DEFAULT = 128 * 1024; // 128 KB
+const CHUNK_MAX = 512 * 1024; // 512 KB
+const BUFFER_HIGH = 8 * 1024 * 1024; // 8 MB
+const BUFFER_LOW = 1 * 1024 * 1024; // 1 MB
+const SPEED_MS = 500; // speed sample window
 
-const GUEST_MAX = 500 * 1024 * 1024;      // 500 MB
-const FREE_MAX  = 5   * 1024 ** 3;        // 5 GB
+const GUEST_MAX = 500 * 1024 * 1024; // 500 MB
+const FREE_MAX = 5 * 1024 ** 3; // 5 GB
 
 const ICE_SERVERS = {
   iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
   ],
 };
 
-const API_BASE = import.meta.env.DEV ? '' : import.meta.env.VITE_API_URL || '';
+const API_BASE = import.meta.env.DEV ? "" : import.meta.env.VITE_API_URL || "";
 
 // ─────────────────────────────────────────────────────────────────────────────
 export function useBusyShare() {
-  const { user }  = useAuth();
-  const isGuest   = !user;
-  const maxBytes  = isGuest ? GUEST_MAX : FREE_MAX;
+  const { user } = useAuth();
+  const isGuest = !user;
+  const maxBytes = isGuest ? GUEST_MAX : FREE_MAX;
 
   // ── Reactive state ────────────────────────────────────────────────────────
-  const [state,        setState]        = useState('idle');
-  const [code,         setCode]         = useState('');
-  const [progress,     setProgress]     = useState(0);
-  const [speed,        setSpeed]        = useState(0);      // bytes/sec
-  const [eta,          setEta]          = useState(null);   // seconds remaining
-  const [error,        setError]        = useState('');
-  const [fileMeta,     setFileMeta]     = useState(null);   // { name, size, mimeType }
-  const [receivedFile, setReceivedFile] = useState(null);   // { name, size, url }
+  const [state, setState] = useState("idle");
+  const [code, setCode] = useState("");
+  const [progress, setProgress] = useState(0);
+  const [speed, setSpeed] = useState(0); // bytes/sec
+  const [eta, setEta] = useState(null); // seconds remaining
+  const [error, setError] = useState("");
+  const [fileMeta, setFileMeta] = useState(null); // { name, size, mimeType }
+  const [receivedFile, setReceivedFile] = useState(null); // { name, size, url }
 
   // ── Internal refs (mutations don't cause re-render) ───────────────────────
-  const socketRef    = useRef(null);
-  const pcRef        = useRef(null);
-  const dcRef        = useRef(null);         // the one DataChannel
-  const abortedRef   = useRef(false);
+  const socketRef = useRef(null);
+  const pcRef = useRef(null);
+  const dcRef = useRef(null); // the one DataChannel
+  const abortedRef = useRef(false);
 
   // Speed tracking
   const chunkSizeRef = useRef(CHUNK_DEFAULT);
-  const sentRef      = useRef(0);            // bytes sent / received
-  const windowRef    = useRef(0);            // bytes in current speed window
-  const speedTimer   = useRef(null);
+  const sentRef = useRef(0); // bytes sent / received
+  const windowRef = useRef(0); // bytes in current speed window
+  const speedTimer = useRef(null);
 
   // Receiver assembly
-  const rxChunks     = useRef([]);           // ArrayBuffer[] collected in order
-  const rxMeta       = useRef(null);
+  const rxChunks = useRef([]); // ArrayBuffer[] collected in order
+  const rxMeta = useRef(null);
 
   // ── Socket (created lazily, reused) ──────────────────────────────────────
   function getSocket() {
     if (!socketRef.current || socketRef.current.disconnected) {
-      socketRef.current = socketIO(API_BASE || window.location.origin, {
-        path: '/socket.io',
-        transports: ['websocket', 'polling'],
+      const socketUrl = import.meta.env.DEV
+        ? "http://localhost:3001"
+        : API_BASE || window.location.origin;
+
+      socketRef.current = socketIO(socketUrl, {
+        path: "/socket.io",
+        transports: ["websocket", "polling"],
+        timeout: 15000,
+        reconnectionAttempts: 5,
       });
     }
     return socketRef.current;
@@ -88,11 +94,15 @@ export function useBusyShare() {
     speedTimer.current = null;
 
     if (dcRef.current) {
-      try { dcRef.current.close(); } catch {}
+      try {
+        dcRef.current.close();
+      } catch {}
       dcRef.current = null;
     }
     if (pcRef.current) {
-      try { pcRef.current.close(); } catch {}
+      try {
+        pcRef.current.close();
+      } catch {}
       pcRef.current = null;
     }
     if (socketRef.current) {
@@ -100,10 +110,10 @@ export function useBusyShare() {
       socketRef.current = null;
     }
 
-    sentRef.current    = 0;
-    windowRef.current  = 0;
-    rxChunks.current   = [];
-    rxMeta.current     = null;
+    sentRef.current = 0;
+    windowRef.current = 0;
+    rxChunks.current = [];
+    rxMeta.current = null;
   }, []);
 
   useEffect(() => cleanup, [cleanup]);
@@ -111,7 +121,7 @@ export function useBusyShare() {
   // ── Speed / ETA / progress tracker ───────────────────────────────────────
   function startSpeedTracker(totalBytes) {
     clearInterval(speedTimer.current);
-    sentRef.current   = 0;
+    sentRef.current = 0;
     windowRef.current = 0;
     chunkSizeRef.current = CHUNK_DEFAULT;
 
@@ -125,22 +135,27 @@ export function useBusyShare() {
       if (bps > 0) setEta(Math.ceil((totalBytes - done) / bps));
 
       // Adaptive chunk size
-      if      (bps < 5_000_000)  chunkSizeRef.current = CHUNK_MIN;
-      else if (bps > 50_000_000) chunkSizeRef.current = CHUNK_MAX;
-      else                        chunkSizeRef.current = CHUNK_DEFAULT;
+      if (bps < 4_000_000) chunkSizeRef.current = CHUNK_MIN;
+      else if (bps > 24_000_000) chunkSizeRef.current = CHUNK_MAX;
+      else chunkSizeRef.current = CHUNK_DEFAULT;
     }, SPEED_MS);
   }
 
   // ── Wait for DC buffer to drain (with polling fallback for mobile) ───────────
   function waitForBufferDrain(dc) {
     return new Promise((resolve) => {
-      if (dc.readyState !== 'open' || dc.bufferedAmount < BUFFER_LOW) {
+      if (dc.readyState !== "open" || dc.bufferedAmount < BUFFER_LOW) {
         resolve();
         return;
       }
 
       let settled = false;
-      const done = () => { if (!settled) { settled = true; resolve(); } };
+      const done = () => {
+        if (!settled) {
+          settled = true;
+          resolve();
+        }
+      };
 
       // Primary path: native event (desktop browsers)
       const prev = dc.onbufferedamountlow;
@@ -151,7 +166,7 @@ export function useBusyShare() {
 
       // Fallback path: 50 ms poll (mobile browsers don't always fire the event)
       const poll = setInterval(() => {
-        if (dc.readyState !== 'open' || dc.bufferedAmount < BUFFER_LOW) {
+        if (dc.readyState !== "open" || dc.bufferedAmount < BUFFER_LOW) {
           clearInterval(poll);
           dc.onbufferedamountlow = prev;
           done();
@@ -162,90 +177,119 @@ export function useBusyShare() {
 
   // ── Attach common error/cancel socket listeners ───────────────────────────
   function attachSocketEvents(socket) {
-    socket.on('busy:cancelled',         () => { cleanup(); setState('cancelled'); });
-    socket.on('busy:peer-disconnected', () => { cleanup(); setState('error'); setError('Peer disconnected.'); });
-    socket.on('busy:error',             ({ message }) => { cleanup(); setState('error'); setError(message); });
-    socket.on('busy:ice', async (c) => {
-      try { await pcRef.current?.addIceCandidate(c); } catch {}
+    socket.on("busy:cancelled", () => {
+      cleanup();
+      setState("cancelled");
+    });
+    socket.on("busy:peer-disconnected", () => {
+      cleanup();
+      setState("error");
+      setError("Peer disconnected.");
+    });
+    socket.on("busy:error", ({ message }) => {
+      cleanup();
+      setState("error");
+      setError(message);
+    });
+    socket.on("busy:ice", async (c) => {
+      try {
+        await pcRef.current?.addIceCandidate(c);
+      } catch {}
     });
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   //  SENDER
   // ─────────────────────────────────────────────────────────────────────────
-  const startTransfer = useCallback(async (file) => {
-    if (!file) return;
-    if (file.size > maxBytes) {
-      setError(`File too large. Max is ${isGuest ? '500 MB' : '5 GB'}.`);
-      setState('error');
-      return;
-    }
+  const startTransfer = useCallback(
+    async (file) => {
+      if (!file) return;
+      if (file.size > maxBytes) {
+        setError(`File too large. Max is ${isGuest ? "500 MB" : "5 GB"}.`);
+        setState("error");
+        return;
+      }
 
-    // Reset everything
-    abortedRef.current = false;
-    setFileMeta({ name: file.name, size: file.size, mimeType: file.type });
-    setState('waiting');
-    setProgress(0); setSpeed(0); setEta(null); setError(''); setCode('');
+      // Reset everything
+      abortedRef.current = false;
+      setFileMeta({ name: file.name, size: file.size, mimeType: file.type });
+      setState("waiting");
+      setProgress(0);
+      setSpeed(0);
+      setEta(null);
+      setError("");
+      setCode("");
 
-    const socket = getSocket();
-    attachSocketEvents(socket);
+      const socket = getSocket();
+      attachSocketEvents(socket);
 
-    socket.emit('busy:create', (res) => {
-      if (res?.error) { setError(res.error); setState('error'); return; }
-      setCode(res.code);
-    });
-
-    socket.once('busy:receiver-joined', async () => {
-      if (abortedRef.current) return;
-      setState('connecting');
-
-      const pc = new RTCPeerConnection(ICE_SERVERS);
-      pcRef.current = pc;
-
-      // Single ordered DataChannel
-      const dc = pc.createDataChannel('busy', { ordered: true });
-      dc.binaryType = 'arraybuffer';
-      dc.bufferedAmountLowThreshold = BUFFER_LOW;
-      dcRef.current = dc;
-
-      pc.onicecandidate = ({ candidate }) => {
-        if (candidate) socket.emit('busy:ice', candidate);
-      };
-      pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'failed') {
-          setError('WebRTC connection failed. Try again.');
-          setState('error');
+      socket.emit("busy:create", (res) => {
+        if (res?.error) {
+          setError(res.error);
+          setState("error");
+          return;
         }
-      };
-
-      dc.onopen = () => pipeline(file, dc);
-
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit('busy:offer', offer);
-
-      socket.once('busy:answer', async (answer) => {
-        if (abortedRef.current) return;
-        try { await pc.setRemoteDescription(answer); } catch (e) {
-          setError('Connection setup failed: ' + e.message); setState('error');
-        }
+        setCode(res.code);
       });
-    });
-  }, [cleanup, isGuest, maxBytes]);
+
+      socket.once("busy:receiver-joined", async () => {
+        if (abortedRef.current) return;
+        setState("connecting");
+
+        const pc = new RTCPeerConnection(ICE_SERVERS);
+        pcRef.current = pc;
+
+        // Single ordered DataChannel
+        const dc = pc.createDataChannel("busy", { ordered: true });
+        dc.binaryType = "arraybuffer";
+        dc.bufferedAmountLowThreshold = BUFFER_LOW;
+        dcRef.current = dc;
+
+        pc.onicecandidate = ({ candidate }) => {
+          if (candidate) socket.emit("busy:ice", candidate);
+        };
+        pc.onconnectionstatechange = () => {
+          if (pc.connectionState === "failed") {
+            setError("WebRTC connection failed. Try again.");
+            setState("error");
+          }
+        };
+
+        dc.onopen = () => pipeline(file, dc);
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit("busy:offer", offer);
+
+        socket.once("busy:answer", async (answer) => {
+          if (abortedRef.current) return;
+          try {
+            await pc.setRemoteDescription(answer);
+          } catch (e) {
+            setError("Connection setup failed: " + e.message);
+            setState("error");
+          }
+        });
+      });
+    },
+    [cleanup, isGuest, maxBytes],
+  );
 
   // ── Streaming pipeline (sender) ───────────────────────────────────────────
   async function pipeline(file, dc) {
     if (abortedRef.current) return;
-    setState('transferring');
+    setState("transferring");
     startSpeedTracker(file.size);
 
     // 1. Send metadata
-    dc.send(JSON.stringify({
-      type: 'meta',
-      name: file.name,
-      size: file.size,
-      mimeType: file.type || 'application/octet-stream',
-    }));
+    dc.send(
+      JSON.stringify({
+        type: "meta",
+        name: file.name,
+        size: file.size,
+        mimeType: file.type || "application/octet-stream",
+      }),
+    );
 
     // 2. Stream chunks using file.slice() — no full-file RAM load
     let offset = 0;
@@ -253,9 +297,9 @@ export function useBusyShare() {
 
     while (offset < total && !abortedRef.current) {
       // Guard: channel may close if mobile goes to background
-      if (dc.readyState !== 'open') {
-        setError('Connection lost. Please try again.');
-        setState('error');
+      if (dc.readyState !== "open") {
+        setError("Connection lost. Please try again.");
+        setState("error");
         return;
       }
 
@@ -263,149 +307,186 @@ export function useBusyShare() {
       if (dc.bufferedAmount >= BUFFER_HIGH) {
         await waitForBufferDrain(dc);
       }
-      if (abortedRef.current || dc.readyState !== 'open') break;
+      if (abortedRef.current || dc.readyState !== "open") break;
 
-      const cs    = chunkSizeRef.current;
-      const end   = Math.min(offset + cs, total);
+      const cs = chunkSizeRef.current;
+      const end = Math.min(offset + cs, total);
       const slice = file.slice(offset, end);
-      const buf   = await slice.arrayBuffer();
+      const buf = await slice.arrayBuffer();
 
       if (abortedRef.current) break;
 
       dc.send(buf);
 
       const sent = end - offset;
-      sentRef.current   += sent;
+      sentRef.current += sent;
       windowRef.current += sent;
       offset = end;
     }
 
     // 3. Done signal
     if (!abortedRef.current) {
-      dc.send(JSON.stringify({ type: 'done' }));
+      dc.send(JSON.stringify({ type: "done" }));
       clearInterval(speedTimer.current);
-      setProgress(100); setSpeed(0); setEta(0);
-      setState('done');
+      setProgress(100);
+      setSpeed(0);
+      setEta(0);
+      setState("done");
     }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   //  RECEIVER
   // ─────────────────────────────────────────────────────────────────────────
-  const joinTransfer = useCallback(async (transferCode) => {
-    if (!transferCode || transferCode.length !== 6) return;
+  const joinTransfer = useCallback(
+    async (transferCode) => {
+      if (!transferCode || transferCode.length !== 6) return;
 
-    abortedRef.current = false;
-    rxChunks.current   = [];
-    rxMeta.current     = null;
-    setState('connecting');
-    setProgress(0); setSpeed(0); setEta(null); setError(''); setReceivedFile(null);
+      abortedRef.current = false;
+      rxChunks.current = [];
+      rxMeta.current = null;
+      setState("connecting");
+      setProgress(0);
+      setSpeed(0);
+      setEta(null);
+      setError("");
+      setReceivedFile(null);
 
-    const socket = getSocket();
-    attachSocketEvents(socket);
+      const socket = getSocket();
+      attachSocketEvents(socket);
 
-    socket.emit('busy:join', transferCode, async (res) => {
-      if (res?.error) { setError(res.error); setState('error'); return; }
-
-      const pc = new RTCPeerConnection(ICE_SERVERS);
-      pcRef.current = pc;
-
-      pc.onicecandidate = ({ candidate }) => {
-        if (candidate) socket.emit('busy:ice', candidate);
-      };
-      pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'failed') {
-          setError('WebRTC connection failed. Try again.');
-          setState('error');
+      socket.emit("busy:join", transferCode, async (res) => {
+        if (res?.error) {
+          setError(res.error);
+          setState("error");
+          return;
         }
-      };
 
-      pc.ondatachannel = ({ channel }) => {
-        channel.binaryType = 'arraybuffer';
-        dcRef.current = channel;
+        const pc = new RTCPeerConnection(ICE_SERVERS);
+        pcRef.current = pc;
 
-        channel.onmessage = ({ data }) => {
+        pc.onicecandidate = ({ candidate }) => {
+          if (candidate) socket.emit("busy:ice", candidate);
+        };
+        pc.onconnectionstatechange = () => {
+          if (pc.connectionState === "failed") {
+            setError("WebRTC connection failed. Try again.");
+            setState("error");
+          }
+        };
+
+        pc.ondatachannel = ({ channel }) => {
+          channel.binaryType = "arraybuffer";
+          dcRef.current = channel;
+
+          channel.onmessage = ({ data }) => {
+            if (abortedRef.current) return;
+
+            if (typeof data === "string") {
+              const msg = JSON.parse(data);
+
+              if (msg.type === "meta") {
+                rxMeta.current = msg;
+                rxChunks.current = [];
+                sentRef.current = 0;
+                windowRef.current = 0;
+                setFileMeta({
+                  name: msg.name,
+                  size: msg.size,
+                  mimeType: msg.mimeType,
+                });
+                setState("transferring");
+                startSpeedTracker(msg.size);
+              }
+
+              if (msg.type === "done") {
+                clearInterval(speedTimer.current);
+                const meta = rxMeta.current;
+                const blob = new Blob(rxChunks.current, {
+                  type: meta?.mimeType || "application/octet-stream",
+                });
+                const url = URL.createObjectURL(blob);
+                rxChunks.current = []; // free memory
+                setReceivedFile({
+                  name: meta?.name || "download",
+                  size: meta?.size || blob.size,
+                  url,
+                });
+                setProgress(100);
+                setSpeed(0);
+                setEta(0);
+                setState("done");
+              }
+              return;
+            }
+
+            // Binary chunk — push in order (channel is ordered)
+            if (data instanceof ArrayBuffer) {
+              rxChunks.current.push(data);
+              sentRef.current += data.byteLength;
+              windowRef.current += data.byteLength;
+            }
+          };
+
+          channel.onerror = (e) => {
+            console.error("[BusyShare] channel error:", e);
+            setError("Data channel error. Try again.");
+            setState("error");
+          };
+        };
+
+        // Handle offer → create answer
+        socket.once("busy:offer", async (offer) => {
           if (abortedRef.current) return;
-
-          if (typeof data === 'string') {
-            const msg = JSON.parse(data);
-
-            if (msg.type === 'meta') {
-              rxMeta.current = msg;
-              rxChunks.current = [];
-              sentRef.current  = 0;
-              windowRef.current = 0;
-              setFileMeta({ name: msg.name, size: msg.size, mimeType: msg.mimeType });
-              setState('transferring');
-              startSpeedTracker(msg.size);
-            }
-
-            if (msg.type === 'done') {
-              clearInterval(speedTimer.current);
-              const meta = rxMeta.current;
-              const blob = new Blob(rxChunks.current, {
-                type: meta?.mimeType || 'application/octet-stream',
-              });
-              const url = URL.createObjectURL(blob);
-              rxChunks.current = []; // free memory
-              setReceivedFile({
-                name: meta?.name || 'download',
-                size: meta?.size || blob.size,
-                url,
-              });
-              setProgress(100); setSpeed(0); setEta(0);
-              setState('done');
-            }
-            return;
+          try {
+            await pc.setRemoteDescription(offer);
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            socket.emit("busy:answer", answer);
+          } catch (e) {
+            setError("Handshake failed: " + e.message);
+            setState("error");
           }
-
-          // Binary chunk — push in order (channel is ordered)
-          if (data instanceof ArrayBuffer) {
-            rxChunks.current.push(data);
-            sentRef.current   += data.byteLength;
-            windowRef.current += data.byteLength;
-          }
-        };
-
-        channel.onerror = (e) => {
-          console.error('[BusyShare] channel error:', e);
-          setError('Data channel error. Try again.'); setState('error');
-        };
-      };
-
-      // Handle offer → create answer
-      socket.once('busy:offer', async (offer) => {
-        if (abortedRef.current) return;
-        try {
-          await pc.setRemoteDescription(offer);
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          socket.emit('busy:answer', answer);
-        } catch (e) {
-          setError('Handshake failed: ' + e.message); setState('error');
-        }
+        });
       });
-    });
-  }, [cleanup]);
+    },
+    [cleanup],
+  );
 
   // ── Cancel / Reset ────────────────────────────────────────────────────────
   const cancel = useCallback(() => {
-    socketRef.current?.emit('busy:cancel');
+    socketRef.current?.emit("busy:cancel");
     cleanup();
-    setState('cancelled');
+    setState("cancelled");
   }, [cleanup]);
 
   const reset = useCallback(() => {
     cleanup();
-    setState('idle');
+    setState("idle");
     abortedRef.current = false;
-    setCode(''); setProgress(0); setSpeed(0); setEta(null);
-    setError(''); setReceivedFile(null); setFileMeta(null);
+    setCode("");
+    setProgress(0);
+    setSpeed(0);
+    setEta(null);
+    setError("");
+    setReceivedFile(null);
+    setFileMeta(null);
   }, [cleanup]);
 
   return {
-    state, code, progress, speed, eta, error, fileMeta, receivedFile,
-    maxBytes, isGuest,
-    startTransfer, joinTransfer, cancel, reset,
+    state,
+    code,
+    progress,
+    speed,
+    eta,
+    error,
+    fileMeta,
+    receivedFile,
+    maxBytes,
+    isGuest,
+    startTransfer,
+    joinTransfer,
+    cancel,
+    reset,
   };
 }

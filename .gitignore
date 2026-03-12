@@ -13,4 +13,5 @@ uploads/
 *.swp
 *.swo
 mongo_data/
+codes
 codes.txt

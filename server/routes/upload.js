@@ -75,7 +75,8 @@ router.post("/", optionalAuth, upload.single("file"), async (req, res) => {
       fs.unlink(tmpPath, () => {});
       return res.status(413).json({
         error: "guest_limit_exceeded",
-        message: "Guest uploads are limited to 500 MB. Sign in to upload up to 8 GB.",
+        message:
+          "Guest uploads are limited to 500 MB. Sign in to upload up to 8 GB.",
         maxBytes: GUEST_MAX_BYTES,
       });
     }
@@ -87,7 +88,8 @@ router.post("/", optionalAuth, upload.single("file"), async (req, res) => {
         fs.unlink(tmpPath, () => {});
         return res.status(402).json({
           error: "limit_exceeded",
-          message: "Monthly storage limit reached. Upgrade to continue uploading.",
+          message:
+            "Monthly storage limit reached. Upgrade to continue uploading.",
           bytesUsed: used,
           freeLimit: 8 * 1024 * 1024 * 1024,
         });
