@@ -74,11 +74,9 @@ function SendTab({ user }) {
         const {
           data: { session },
         } = await supabase.auth.getSession();
-        if (session)
-          xhr.setRequestHeader(
-            "Authorization",
-            `Bearer ${session.access_token}`,
-          );
+        if (session) {
+          xhr.setRequestHeader("Authorization", `Bearer ${session.access_token}`);
+        }
       }
 
       xhr.upload.onprogress = (e) => {
@@ -93,6 +91,7 @@ function SendTab({ user }) {
         } catch {
           data = {};
         }
+
         if (xhr.status === 200) {
           setResult(data);
           setFile(null);
@@ -112,6 +111,7 @@ function SendTab({ user }) {
         setError("Network error");
         showNotification("Network error", "error");
       };
+
       xhr.send(formData);
     } catch (err) {
       setUploading(false);
