@@ -461,12 +461,24 @@ export function useLANShare() {
         await waitForBufferDrain(bestCh);
       }
       if (abortedRef.current) break;
+      // Re-validate after waitForBufferDrain (channel may have closed during drain)
+      if (bestCh.readyState !== "open") {
+        setError("Connection lost. Please try again.");
+        setState("error");
+        return;
+      }
 
       const cs = chunkSizeRef.current;
       const end = Math.min(offset + cs, total);
       const buf = await file.slice(offset, end).arrayBuffer();
 
       if (abortedRef.current) break;
+      // Re-validate after arrayBuffer() await — channel may have closed while reading
+      if (bestCh.readyState !== "open") {
+        setError("Connection lost. Please try again.");
+        setState("error");
+        return;
+      }
 
       bestCh.send(packChunk(seq++, buf));
 
@@ -477,7 +489,10 @@ export function useLANShare() {
     }
 
     if (!abortedRef.current) {
-      channels[0].send(JSON.stringify({ type: "done", totalChunks: seq }));
+      // Guard: channel 0 must still be open to deliver the done signal
+      if (channels[0].readyState === "open") {
+        channels[0].send(JSON.stringify({ type: "done", totalChunks: seq }));
+      }
       clearInterval(speedTimer.current);
       setProgress(100);
       setSpeed(0);
